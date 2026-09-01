@@ -200,7 +200,6 @@ High-value operations (e.g., money transfers) require hardware-backed digital si
 | `txnId` | Internal SDK transaction ID. |
 | `txnHash` | SHA-256 hash of the transaction data to be signed. |
 | `authenticationType` | Requested verification method (e.g., `'PIN'`, `'BIOMETRIC'`). |
-| `numberMatchingCodeForDisplay` | (Optional) 2-digit code for Number Matching / Push flows. |
 
 #### Launching the Verification UI
 
@@ -210,7 +209,6 @@ final challengeResult = await apiService.initChallenge(...);
 final txnId = challengeResult['txnId'];
 final txnHash = challengeResult['txnHash'];
 final authType = challengeResult['authenticationType'];
-final numberMatchingCode = challengeResult['numberMatchingCodeForDisplay'];
 
 if (txnId != null && txnHash != null) {
   // 1. Ensure SDK session is initialized
@@ -225,7 +223,6 @@ if (txnId != null && txnHash != null) {
         builder: (_) => OneAuthPinVerificationScreen(
           txnId: txnId,
           txnHash: txnHash,
-          numberMatchingCode: numberMatchingCode,
           pinLength: 4, // Optional: defaults to 4
           onComplete: () => Navigator.pop(context, true),
         ),
