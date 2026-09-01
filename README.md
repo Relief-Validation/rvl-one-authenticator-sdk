@@ -26,6 +26,17 @@ Unified authentication and identity SDK for mobile applications, providing a sec
 
 ---
 
+## Requirements & Compatibility
+
+| Environment | Supported Versions |
+| :--- | :--- |
+| **Dart SDK** | `>= 3.0.0 < 4.0.0` |
+| **Flutter** | `>= 3.0.0` |
+| **Android** | `minSdkVersion 23` (Android 6.0+) |
+| **iOS** | `iOS 12.0+` |
+
+---
+
 ## Installation
 
 Add the following to your Flutter app's `pubspec.yaml`:
@@ -265,4 +276,4 @@ final response = await dio.post('/your-endpoint', data: {
 
 - **Networking**: `dio`, `dio_cache_interceptor`
 - **Security**: `flutter_secure_storage`, `local_auth`, `freerasp`, `crypto`, `envied`
-- **Device Info**: `device_info_plus`, `package_info_plus`
+- **Device Info**: `device_info_plus`
