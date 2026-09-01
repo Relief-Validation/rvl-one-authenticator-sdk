@@ -4,10 +4,18 @@
 *.log
 *.pyc
 *.swp
+.DS_Store
+.atom/
 .buildlog/
 .history
+.svn/
+migrate_working_dir/
 
-
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
 
 # Flutter repo-specific
 /bin/cache/
@@ -32,6 +40,8 @@ analysis_benchmark.json
 .packages.generated
 
 # Flutter/Dart/Pub related
+# Libraries should not include pubspec.lock, per https://dart.dev/guides/libraries/private-files#pubspeclock.
+/pubspec.lock
 **/doc/api/
 .dart_tool/
 .flutter-plugins
@@ -40,6 +50,7 @@ analysis_benchmark.json
 .packages
 .pub-preload-cache/
 .pub/
+/build/
 build/
 flutter_*.png
 linked_*.ds
@@ -105,10 +116,14 @@ unlinked_spec.ds
 **/linux/flutter/generated_plugins.cmake
 
 # Coverage
+/coverage/
 coverage/
 
 # Symbols
 app.*.symbols
+
+# Environment variables
+.env
 
 # Exceptions to above rules.
 !**/ios/**/default.mode1v3
