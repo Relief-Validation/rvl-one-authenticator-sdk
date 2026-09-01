@@ -3,6 +3,7 @@ import '../core/theme.dart';
 import '../widgets/app_bar.dart';
 import '../models/user.dart';
 import '../widgets/primary_button.dart';
+import '../widgets/snack_bar.dart';
 import 'status_view_model.dart';
 
 class OneAuthStatusScreen extends StatefulWidget {
@@ -49,8 +50,10 @@ class _OneAuthStatusScreenState extends State<OneAuthStatusScreen> with SingleTi
       }
     } else {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_viewModel.errorMessage ?? 'Enrollment Failed')),
+        OneAuthSnackBar.show(
+          context,
+          message: _viewModel.errorMessage ?? 'Enrollment Failed',
+          isError: true,
         );
         Navigator.pop(context);
       }

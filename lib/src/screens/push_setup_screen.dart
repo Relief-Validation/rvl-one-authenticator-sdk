@@ -4,6 +4,7 @@ import '../widgets/primary_button.dart';
 import '../models/user.dart';
 import '../one_auth_impl.dart';
 import '../core/theme.dart';
+import '../widgets/snack_bar.dart';
 
 enum PushSetupType { approval, matching }
 
@@ -199,8 +200,10 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
                   );
                   widget.onComplete();
                 } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Activation Failed: $e')),
+                  OneAuthSnackBar.show(
+                    context,
+                    message: 'Activation Failed: $e',
+                    isError: true,
                   );
                 }
               },

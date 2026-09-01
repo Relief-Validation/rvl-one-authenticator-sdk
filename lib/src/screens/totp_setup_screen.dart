@@ -4,6 +4,7 @@ import '../core/theme.dart';
 import '../core/totp_generator.dart';
 import '../widgets/app_bar.dart';
 import '../widgets/primary_button.dart';
+import '../widgets/snack_bar.dart';
 import '../models/user.dart';
 import '../one_auth_impl.dart';
 
@@ -266,11 +267,9 @@ class _OneAuthTotpSetupScreenState extends State<OneAuthTotpSetupScreen> {
                       onPressed: () {
                         Clipboard.setData(ClipboardData(text: _currentCode));
                         setState(() => _showNotification = false);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Code copied to clipboard'),
-                            duration: Duration(seconds: 2),
-                          ),
+                        OneAuthSnackBar.show(
+                          context,
+                          message: 'Code copied to clipboard',
                         );
                       },
                     ),
