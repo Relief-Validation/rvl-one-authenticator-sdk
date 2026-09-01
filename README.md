@@ -19,12 +19,23 @@ Unified authentication and identity SDK for mobile applications, providing a sec
 
 ## Installation
 
-Add the following to your `pubspec.yaml`:
+Add the following to your Flutter app's `pubspec.yaml`:
 
 ```yaml
 dependencies:
   one_auth:
-    path: packages/one_auth
+    git:
+      url: https://github.com/Relief-Validation/rvl-one-authenticator-sdk.git
+      ref: v0.1.0
+```
+
+Or for SSH:
+```yaml
+dependencies:
+  one_auth:
+    git:
+      url: git@github.com:Relief-Validation/rvl-one-authenticator-sdk.git
+      ref: v0.1.0
 ```
 
 ## Configuration
