@@ -181,7 +181,7 @@ High-value operations (e.g., money transfers) require hardware-backed digital si
 
 ### Step-by-Step Signing Flow
 
-1. **Initialize SDK**: Ensure client session is active.
+1. **Initialize SDK**: Call `await OneAuth().initialize(clientSecret: '...')` to ensure the client
 2. **Challenge Generation**: Request a signing challenge from your Core Banking System (CBS) / backend API.
 
 #### Challenge Payload Example (Sent to CBS Backend)
