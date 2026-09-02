@@ -86,40 +86,42 @@ class AuthInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
-    if (err.response?.statusCode == 401) {
-      debugPrint('OneAuth Interceptor: 401 Unauthorized detected. Attempting seamless retry...');
-
-      // Prevent infinite loops if re-authentication also fails
-      if (err.requestOptions.extra['retried'] == true) {
-        debugPrint('OneAuth Interceptor: Retry already attempted. Failing.');
-        if (onSessionExpired != null) onSessionExpired!();
-        return super.onError(err, handler);
-      }
+    // 1. If it's a 401 and not already a retry, and not the token endpoint itself
+    if (err.response?.statusCode == 401 && 
+        !err.requestOptions.path.contains('/auth/client/token') &&
+        err.requestOptions.extra['retried'] != true) {
+      
+      debugPrint('OneAuth Interceptor: 401 Unauthorized detected on ${err.requestOptions.path}. Attempting silent refresh...');
 
       if (onRefreshToken != null) {
         try {
           final success = await onRefreshToken!();
           if (success) {
-            debugPrint('OneAuth Interceptor: Token refreshed. Retrying original request...');
+            debugPrint('OneAuth Interceptor: Token refreshed successfully. Retrying original request...');
             
-            // Clone the original request with the updated token and a retry flag
             final options = err.requestOptions;
             options.extra['retried'] = true;
             
-            // Re-fetch the updated tokens
+            // Re-fetch the updated tokens to ensure the retry uses the fresh ones
             final clientToken = getClientToken != null ? await getClientToken!() : null;
             final userToken = getUserToken != null ? await getUserToken!() : null;
             
+            // Update Authorization header with the new token
             if (userToken != null) {
               options.headers['Authorization'] = 'Bearer $userToken';
             } else if (clientToken != null) {
               options.headers['Authorization'] = 'Bearer $clientToken';
             }
 
-            // Create a new Dio instance to perform the retry without triggering the same interceptor logic
-            // or use the current one if we are careful. Here we use the same dio instance.
-            final dio = Dio(); // Basic dio for retry to avoid interceptor complexity
-            final response = await dio.request(
+            // Perform the retry using a dedicated Dio instance that mimics the original setup
+            // but without interceptors to avoid recursion or complex state issues.
+            final retryDio = Dio(BaseOptions(
+              baseUrl: options.baseUrl,
+              connectTimeout: options.connectTimeout,
+              receiveTimeout: options.receiveTimeout,
+            ));
+            
+            final response = await retryDio.request(
               options.path,
               data: options.data,
               queryParameters: options.queryParameters,
@@ -133,14 +135,16 @@ class AuthInterceptor extends Interceptor {
             return handler.resolve(response);
           }
         } catch (e) {
-          debugPrint('OneAuth Interceptor: Failed to refresh token during retry: $e');
+          debugPrint('OneAuth Interceptor: Silent refresh or retry failed: $e');
         }
       }
 
+      // If we reach here, refresh/retry failed
       if (onSessionExpired != null) {
         onSessionExpired!();
       }
     }
+    
     super.onError(err, handler);
   }
 }
