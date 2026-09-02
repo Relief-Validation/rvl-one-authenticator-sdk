@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cache_interceptor/dio_cache_interceptor.dart';
 import 'auth_interceptor.dart';
+import 'error_interceptor.dart';
 
 class DioClient {
   late final Dio dio;
@@ -53,6 +54,8 @@ class DioClient {
       onRefreshToken: onRefreshToken,
       onSessionExpired: onSessionExpired,
     ));
+
+    dio.interceptors.add(ErrorInterceptor());
 
     dio.interceptors.add(LogInterceptor(
       requestBody: true,

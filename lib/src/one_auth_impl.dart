@@ -275,7 +275,7 @@ class OneAuth implements OneAuthInterface {
       _clientStatusController.add(false);
       debugPrint('OneAuth: Client Login Failed: ${e.message}');
       throw OneAuthAuthException(
-        'Client Authentication Failed: ${e.message}',
+        e.message ?? 'Client Authentication Failed',
         e,
       );
     }
@@ -331,7 +331,7 @@ class OneAuth implements OneAuthInterface {
     } on DioException catch (e) {
       debugPrint('OneAuth: Failed to fetch enrollment nonce: ${e.message}');
       throw OneAuthNetworkException(
-        'Failed to fetch enrollment nonce: ${e.message}',
+        e.message ?? 'Failed to fetch enrollment nonce',
         statusCode: e.response?.statusCode,
         originalError: e,
       );
@@ -519,7 +519,7 @@ class OneAuth implements OneAuthInterface {
     } on DioException catch (e) {
       debugPrint('OneAuth: CSR Submission Failed: ${e.message}');
       throw OneAuthNetworkException(
-        'CSR Submission Failed: ${e.message}',
+        e.message ?? 'CSR Submission Failed',
         statusCode: e.response?.statusCode,
         originalError: e,
       );
@@ -719,7 +719,7 @@ class OneAuth implements OneAuthInterface {
       }
 
       throw OneAuthNetworkException(
-        'Failed to check enrollment status: ${e.message}',
+        e.message ?? 'Failed to check enrollment status',
         statusCode: e.response?.statusCode,
         originalError: e,
       );
