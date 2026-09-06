@@ -30,6 +30,9 @@ abstract class OneAuthInterface {
   /// Retrieves the issued certificate PEM.
   Future<String?> getCertificate();
 
+  /// Retrieves the stored CSR PEM.
+  Future<String?> getCsrPem();
+
   /// Sets the user-level authentication token.
   void setUserToken(String? token);
 
@@ -44,6 +47,7 @@ abstract class OneAuthInterface {
     required String txnId,
     required String txnHash,
     required String pin,
+    String? authType,
     String? selectedNumberMatchingCode,
   });
 

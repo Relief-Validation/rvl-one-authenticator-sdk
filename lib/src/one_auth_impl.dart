@@ -14,6 +14,7 @@ import 'models/user.dart';
 import 'api/dio_client.dart';
 import 'core/env.dart';
 import 'core/exceptions.dart';
+import 'core/csr_manager.dart';
 import 'package:freerasp/freerasp.dart';
 
 class OneAuth implements OneAuthInterface {
@@ -26,6 +27,7 @@ class OneAuth implements OneAuthInterface {
   static const _cryptoChannel = MethodChannel('com.example.one_auth/crypto');
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  late final OneAuthCsrManager _csrManager = OneAuthCsrManager(secureStorage: _secureStorage);
   String? _clientSecret;
   String? _baseUrl;
   // String? _bankId;
@@ -300,6 +302,12 @@ class OneAuth implements OneAuthInterface {
   }
 
   @override
+  Future<String?> getCsrPem() async {
+    _ensureInitialized();
+    return await _csrManager.getCsrPem();
+  }
+
+  @override
   Future<Map<String, dynamic>> getEnrollmentNonce([String? userId]) async {
     _ensureInitialized();
 
@@ -327,6 +335,7 @@ class OneAuth implements OneAuthInterface {
 
       debugPrint(
           'OneAuth: Enrollment nonce fetched. SessionToken: ${_sessionToken?.substring(0, 5)}...');
+
       return response.data;
     } on DioException catch (e) {
       debugPrint('OneAuth: Failed to fetch enrollment nonce: ${e.message}');
@@ -413,47 +422,18 @@ class OneAuth implements OneAuthInterface {
         osVersion = 'iOS ${iosInfo.systemVersion}';
       }
 
-      String csrPem = '-----BEGIN CERTIFICATE REQUEST-----\n...';
-      List<dynamic> attestationChain = ["..."];
+      final csrResult = await _csrManager.getOrGenerateCsr(
+        challenge: effectiveNonce,
+        identity: authenticatorUserId ?? '',
+        deviceUuid: deviceUuid,
+      );
 
-      if (Platform.isAndroid) {
-        debugPrint(
-            'OneAuth: Requesting hardware-backed CSR and Attestation from Android...');
-        try {
-          final result = await _cryptoChannel
-              .invokeMapMethod<String, dynamic>('generateCsrAndAttestation', {
-            'challenge': effectiveNonce,
-            'identity': authenticatorUserId,
-            'deviceUuid': deviceUuid,
-          });
-          if (result != null) {
-            csrPem = result['csrPem'];
-            attestationChain = result['attestationCertificateChain'];
-            debugPrint('OneAuth: Received hardware-backed CSR.');
-          }
-        } on PlatformException catch (e) {
-          debugPrint('OneAuth Native Error: [${e.code}] ${e.message}');
-          debugPrint('OneAuth Native Details: ${e.details}');
-          throw OneAuthCryptoException(
-            'Native CSR generation failed: ${e.message}',
-            code: e.code,
-            originalError: e,
-          );
-        } catch (e) {
-          debugPrint('OneAuth Unexpected Crypto Error: $e');
-          throw OneAuthCryptoException(
-            'Unexpected crypto error during CSR generation',
-            originalError: e,
-          );
-        }
-      }
-
-      final payload = {
+      final payload = <String, dynamic>{
         "sessionToken": effectiveSessionToken,
         "customerUniqueKey": authenticatorUserId,
         "deviceUuid": deviceUuid,
-        "csrPem": csrPem,
-        "attestationCertificateChain": attestationChain,
+        "csrPem": csrResult.csrPem,
+        "attestationCertificateChain": csrResult.attestationChain,
         "accountNumber": user.accountNumber,
         "customerName": user.name,
         "nid": user.nid,
@@ -463,8 +443,13 @@ class OneAuth implements OneAuthInterface {
         "appInstanceId": appInstanceId,
         "osVersion": osVersion,
         "preferredAuthenticationType": user.preferredAuthenticationType,
-        "pin": user.pin,
       };
+
+      if (user.preferredAuthenticationType == 'TOTP') {
+        payload["totpCode"] = user.totpCode ?? user.pin;
+      } else {
+        payload["pin"] = user.pin;
+      }
 
       developer.log('OCSR with payload: $payload', name: 'OneAuth');
       // Log if any value is null
@@ -589,6 +574,7 @@ class OneAuth implements OneAuthInterface {
     required String txnId,
     required String txnHash,
     required String pin,
+    String? authType,
     String? selectedNumberMatchingCode,
   }) async {
     _ensureInitialized();
@@ -642,15 +628,20 @@ class OneAuth implements OneAuthInterface {
     final finalIntegrity = await _getDeviceIntegrity();
     _validateIntegrity(finalIntegrity, 'Transaction submission');
 
-    final payload = {
+    final payload = <String, dynamic>{
       "deviceUuid": deviceUuid,
       "certificateSerial": certificateSerial,
       "txnHash": txnHash,
       "signatureBase64": signatureBase64,
-      "pinCode": pin,
       // "selectedNumberMatchingCode": selectedNumberMatchingCode,
       "deviceIntegrity": finalIntegrity,
     };
+
+    if (authType == 'TOTP' || (authType == null && pin.length == 6)) {
+      payload["totpCode"] = pin;
+    } else {
+      payload["pinCode"] = pin;
+    }
 
     developer.log('submitTransactionSignature request: $payload', name: 'OneAuth');
 

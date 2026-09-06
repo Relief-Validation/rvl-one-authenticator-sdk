@@ -55,8 +55,17 @@ class _OneAuthTotpSetupScreenState extends State<OneAuthTotpSetupScreen> {
       // It is provisioned during user enrollment (e.g., via QR code scan).
       String? secret = await OneAuth().getTotpSecret(widget.user.id);
       
-      // For this demo, if no secret is provisioned yet, we use a default.
-      secret ??= 'JBSWY3DPEHPK3PXP'; 
+      if (secret == null) {
+        final csrPem = await OneAuth().getCsrPem();
+        if (csrPem != null && csrPem.isNotEmpty) {
+          secret = OneAuthTotpGenerator.generateSecretFromPublicKeyPem(csrPem);
+        }
+      }
+
+      if (secret == null || secret.isEmpty) {
+        debugPrint('OneAuth: No TOTP secret or CSR PEM found to generate TOTP code.');
+        return;
+      }
       
       final code = OneAuthTotpGenerator.generateCode(secret);
 
@@ -111,7 +120,10 @@ class _OneAuthTotpSetupScreenState extends State<OneAuthTotpSetupScreen> {
 
     try {
       await OneAuth().submitCsr(
-        widget.user.copyWith(preferredAuthenticationType: 'TOTP'),
+        widget.user.copyWith(
+          preferredAuthenticationType: 'TOTP',
+          totpCode: code,
+        ),
       );
       widget.onComplete();
     } catch (e) {
@@ -165,7 +177,7 @@ class _OneAuthTotpSetupScreenState extends State<OneAuthTotpSetupScreen> {
                                 ),
                                 inputFormatters: [
                                   FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(1),
+                                  LengthLimitingTextInputFormatter(6),
                                 ],
                                 decoration: InputDecoration(
                                   counterText: '',

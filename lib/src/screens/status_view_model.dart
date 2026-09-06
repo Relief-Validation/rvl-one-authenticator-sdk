@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../one_auth.dart';
-import '../one_auth_impl.dart';
 import '../core/exceptions.dart';
 
 class OneAuthStatusViewModel extends ChangeNotifier {
@@ -46,13 +45,27 @@ class OneAuthStatusViewModel extends ChangeNotifier {
       // Step 1: Fetch Nonce
       _currentStep = 1;
       notifyListeners();
-      await OneAuth().getEnrollmentNonce(user.id);
+      final nonceData = await OneAuth().getEnrollmentNonce(user.id);
       
       await Future.delayed(const Duration(milliseconds: 500));
 
-      // Step 2: Verification (Simulated)
+      // Step 2: Verification & Hardware CSR Generation
       _currentStep = 2;
       notifyListeners();
+
+      final effectiveNonce = nonceData['nonceBase64'] ??
+          nonceData['data']?['nonceBase64'] ??
+          nonceData['nonce_base64'] ??
+          '';
+
+      final csrResult = await OneAuthCsrManager().getOrGenerateCsr(
+        challenge: effectiveNonce,
+        identity: user.id,
+        deviceUuid: '',
+      );
+
+      debugPrint('OneAuth: StatusViewModel generated/retrieved CSR: ${csrResult.csrPem.substring(0, 30)}...');
+
       await Future.delayed(const Duration(seconds: 1));
 
       // Step 3: Ready for setup

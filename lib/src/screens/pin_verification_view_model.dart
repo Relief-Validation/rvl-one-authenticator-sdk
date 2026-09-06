@@ -50,6 +50,7 @@ class OneAuthPinVerificationViewModel extends ChangeNotifier {
         txnId: txnId,
         txnHash: txnHash,
         pin: pin,
+        authType: pinLength == 6 ? 'TOTP' : 'PIN',
         selectedNumberMatchingCode: numberMatchingCode,
       );
       

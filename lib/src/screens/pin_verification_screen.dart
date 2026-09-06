@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../core/theme.dart';
+import '../core/totp_generator.dart';
 import '../widgets/app_bar.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/pin_input.dart';
+import '../widgets/snack_bar.dart';
 import '../one_auth_impl.dart';
-import '../core/exceptions.dart';
 import 'pin_verification_view_model.dart';
 
 class OneAuthPinVerificationScreen extends StatefulWidget {
@@ -32,6 +34,8 @@ class _OneAuthPinVerificationScreenState extends State<OneAuthPinVerificationScr
   late final OneAuthPinVerificationViewModel _viewModel;
   late final List<TextEditingController> _pinControllers;
   late final List<FocusNode> _pinFocusNodes;
+  String _currentCode = '';
+  bool _showNotification = false;
 
   @override
   void initState() {
@@ -44,6 +48,51 @@ class _OneAuthPinVerificationScreenState extends State<OneAuthPinVerificationScr
     );
     _pinControllers = List.generate(widget.pinLength, (_) => TextEditingController());
     _pinFocusNodes = List.generate(widget.pinLength, (_) => FocusNode());
+
+    if (widget.pinLength == 6) {
+      _showSimulatedPushNotification();
+    }
+  }
+
+  void _showSimulatedPushNotification() {
+    Future.delayed(const Duration(seconds: 2), () async {
+      if (!mounted) return;
+
+      const storage = FlutterSecureStorage();
+      final userId = await storage.read(key: 'authenticatorUserId');
+      String? secret;
+      if (userId != null && userId.isNotEmpty) {
+        secret = await OneAuth().getTotpSecret(userId);
+      }
+
+      if (secret == null) {
+        final csrPem = await OneAuth().getCsrPem();
+        if (csrPem != null && csrPem.isNotEmpty) {
+          secret = OneAuthTotpGenerator.generateSecretFromPublicKeyPem(csrPem);
+        }
+      }
+
+      if (secret == null || secret.isEmpty) {
+        debugPrint('OneAuth: No TOTP secret or CSR PEM found to generate TOTP code.');
+        return;
+      }
+
+      final code = OneAuthTotpGenerator.generateCode(secret);
+
+      if (!mounted) return;
+
+      setState(() {
+        _currentCode = code;
+        _showNotification = true;
+      });
+
+      // Auto-hide after 30 seconds
+      Future.delayed(const Duration(seconds: 30), () {
+        if (mounted && _showNotification) {
+          setState(() => _showNotification = false);
+        }
+      });
+    });
   }
 
   @override
@@ -70,55 +119,133 @@ class _OneAuthPinVerificationScreenState extends State<OneAuthPinVerificationScr
     return ListenableBuilder(
       listenable: _viewModel,
       builder: (context, _) {
-        return Scaffold(
-          backgroundColor: OneAuthTheme.getBackgroundColor(context),
-          appBar: const OneAuthAppBar(),
-          body: GestureDetector(
-            onTap: () => FocusScope.of(context).unfocus(),
-            child: Column(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Column(
+        return Stack(
+          children: [
+            Scaffold(
+              backgroundColor: OneAuthTheme.getBackgroundColor(context),
+              appBar: const OneAuthAppBar(),
+              body: GestureDetector(
+                onTap: () => FocusScope.of(context).unfocus(),
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          children: [
+                            Text(
+                              'Transaction Authorization',
+                              style: OneAuthTheme.headingStyle(context),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              widget.numberMatchingCode != null 
+                                ? 'Confirm the code ${widget.numberMatchingCode} and enter your PIN'
+                                : widget.pinLength == 6
+                                    ? 'Enter your 6-digit TOTP code to authorize this transaction'
+                                    : 'Enter your ${widget.pinLength}-digit PIN to authorize this transaction',
+                              textAlign: TextAlign.center,
+                              style: OneAuthTheme.subHeadingStyle(context),
+                            ),
+                            const SizedBox(height: 40),
+                            _buildPinSection(
+                              widget.pinLength == 6 ? 'Enter TOTP Code' : 'Enter PIN',
+                              _pinControllers,
+                              _pinFocusNodes,
+                            ),
+                            if (_viewModel.errorMessage != null) ...[
+                              const SizedBox(height: 24),
+                              Text(
+                                _viewModel.errorMessage!,
+                                style: const TextStyle(color: Colors.red, fontSize: 14, fontWeight: FontWeight.w500),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                            const SizedBox(height: 40),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: OneAuthPrimaryButton(
+                        label: _viewModel.isLoading ? 'Authorizing...' : 'Authorize',
+                        onPressed: _viewModel.isLoading ? null : _handleVerify,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (_showNotification)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 10,
+                left: 16,
+                right: 16,
+                child: Material(
+                  color: Colors.transparent,
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.1),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                      border: Border.all(color: Colors.grey[200]!),
+                    ),
+                    child: Row(
                       children: [
-                        Text(
-                          'Transaction Authorization',
-                          style: OneAuthTheme.headingStyle(context),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          widget.numberMatchingCode != null 
-                            ? 'Confirm the code ${widget.numberMatchingCode} and enter your PIN'
-                            : 'Enter your ${widget.pinLength}-digit PIN to authorize this transaction',
-                          textAlign: TextAlign.center,
-                          style: OneAuthTheme.subHeadingStyle(context),
-                        ),
-                        const SizedBox(height: 40),
-                        _buildPinSection('Enter PIN', _pinControllers, _pinFocusNodes),
-                        if (_viewModel.errorMessage != null) ...[
-                          const SizedBox(height: 24),
-                          Text(
-                            _viewModel.errorMessage!,
-                            style: const TextStyle(color: Colors.red, fontSize: 14, fontWeight: FontWeight.w500),
-                            textAlign: TextAlign.center,
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: OneAuthColors.primaryBlue,
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                        ],
-                        const SizedBox(height: 40),
+                          child: const Icon(Icons.security, color: Colors.white, size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'One Authenticator',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold, 
+                                  color: Colors.black,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              Text(
+                                'Your TOTP code is: $_currentCode',
+                                style: TextStyle(color: Colors.grey[700], fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.copy, color: OneAuthColors.primaryBlue, size: 20),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: _currentCode));
+                            setState(() => _showNotification = false);
+                            OneAuthSnackBar.show(
+                              context,
+                              message: 'Code copied to clipboard',
+                            );
+                          },
+                        ),
                       ],
                     ),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: OneAuthPrimaryButton(
-                    label: _viewModel.isLoading ? 'Authorizing...' : 'Authorize',
-                    onPressed: _viewModel.isLoading ? null : _handleVerify,
-                  ),
-                ),
-              ],
-            ),
-          ),
+              ),
+          ],
         );
       },
     );
@@ -138,6 +265,7 @@ class _OneAuthPinVerificationScreenState extends State<OneAuthPinVerificationScr
         const SizedBox(height: 12),
         OneAuthPinInput(
           length: widget.pinLength,
+          obscureText: widget.pinLength != 6,
           controllers: controllers,
           focusNodes: focusNodes,
           onChanged: (pin) => _viewModel.clearError(),

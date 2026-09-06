@@ -9,7 +9,10 @@ class OneAuthUser {
   final String? profileImageUrl;
   final String? token;
   final String? pin;
+  final String? totpCode;
   final String? preferredAuthenticationType;
+
+  String? get totp => totpCode;
 
   OneAuthUser({
     required this.id,
@@ -22,6 +25,7 @@ class OneAuthUser {
     this.profileImageUrl,
     this.token,
     this.pin,
+    this.totpCode,
     this.preferredAuthenticationType,
   });
 
@@ -37,6 +41,7 @@ class OneAuthUser {
       profileImageUrl: json['profileImageUrl'],
       token: json['token'],
       pin: json['pin'],
+      totpCode: json['totpCode'] ?? json['totp'],
       preferredAuthenticationType: json['preferredAuthenticationType'],
     );
   }
@@ -52,6 +57,7 @@ class OneAuthUser {
     String? profileImageUrl,
     String? token,
     String? pin,
+    String? totpCode,
     String? preferredAuthenticationType,
   }) {
     return OneAuthUser(
@@ -65,6 +71,7 @@ class OneAuthUser {
       profileImageUrl: profileImageUrl ?? this.profileImageUrl,
       token: token ?? this.token,
       pin: pin ?? this.pin,
+      totpCode: totpCode ?? this.totpCode,
       preferredAuthenticationType: preferredAuthenticationType ?? this.preferredAuthenticationType,
     );
   }
@@ -81,6 +88,7 @@ class OneAuthUser {
       'profileImageUrl': profileImageUrl,
       'token': token,
       'pin': pin,
+      'totpCode': totpCode,
       'preferredAuthenticationType': preferredAuthenticationType,
     };
   }

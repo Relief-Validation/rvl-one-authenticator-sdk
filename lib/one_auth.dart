@@ -2,6 +2,7 @@ library one_auth;
 
 export 'src/one_auth_interface.dart';
 export 'src/one_auth_impl.dart';
+export 'src/core/csr_manager.dart';
 export 'src/models/user.dart';
 export 'src/screens/setup_screen.dart';
 export 'src/screens/status_screen.dart';
