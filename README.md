@@ -127,7 +127,8 @@ The `OneAuthSetupScreen` requires a `OneAuthUser` object as a payload. This obje
 | `dob` | `String?` | Date of birth (format: `YYYY-MM-DD`). |
 | `accountNumber` | `String?` | Primary bank account number. |
 | `profileImageUrl` | `String?` | URL for the user's profile picture. |
-| `preferredAuthenticationType` | `String?` | Set by the SDK during enrollment (e.g. `'PIN'`, `'BIOMETRIC'`). |
+| `pin` | `String?` | PIN code or TOTP verification code. |
+| `preferredAuthenticationType` | `String?` | Set during enrollment (e.g. `'PIN'`, `'BIOMETRIC'`, `'TOTP'`, `'PUSH'`, `'NUMBER_MATCHING'`). |
 
 ### Passing Data to Setup Screen
 
@@ -195,11 +196,11 @@ High-value operations (e.g., money transfers) require hardware-backed digital si
 | `currency` | Currency code (e.g. `'BDT'`). |
 
 #### Challenge Response Parameters (Received from Backend)
-| Field | Description |
-| :--- | :--- |
-| `txnId` | Internal SDK transaction ID. |
-| `txnHash` | SHA-256 hash of the transaction data to be signed. |
-| `authenticationType` | Requested verification method (e.g., `'PIN'`, `'BIOMETRIC'`). |
+| Field | Description                                              |
+| :--- |:---------------------------------------------------------|
+| `txnId` | Internal SDK transaction ID.                             |
+| `txnHash` | SHA-256 hash of the transaction data to be signed.       |
+| `authenticationType` | Requested verification method (e.g., `'PIN'`, `'TOTP'`). |
 
 #### Launching the Verification UI
 
@@ -217,14 +218,24 @@ if (txnId != null && txnHash != null) {
   // 2. Launch SDK Verification Screen based on authType
   bool? verified;
   if (authType == 'PIN') {
-    verified = await Navigator.push<bool>(
-      context,
+    verified = await navigator.push<bool>(
       MaterialPageRoute(
         builder: (_) => OneAuthPinVerificationScreen(
           txnId: txnId,
           txnHash: txnHash,
-          pinLength: 4, // Optional: defaults to 4
-          onComplete: () => Navigator.pop(context, true),
+          pinLength: 4,
+          onComplete: () => navigator.pop(true),
+        ),
+      ),
+    );
+  } else if (authType == 'TOTP') {
+    verified = await navigator.push<bool>(
+      MaterialPageRoute(
+        builder: (_) => OneAuthPinVerificationScreen(
+          txnId: txnId,
+          txnHash: txnHash,
+          pinLength: 6,
+          onComplete: () => navigator.pop(true),
         ),
       ),
     );
