@@ -448,7 +448,7 @@ class OneAuth implements OneAuthInterface {
       if (user.preferredAuthenticationType == 'TOTP') {
         payload["totpCode"] = user.totpCode ?? user.pin;
       } else {
-        payload["pin"] = user.pin;
+        payload["pinCode"] = user.pin;
       }
 
       developer.log('OCSR with payload: $payload', name: 'OneAuth');
