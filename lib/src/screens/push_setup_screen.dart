@@ -200,11 +200,13 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
                   );
                   widget.onComplete();
                 } catch (e) {
-                  OneAuthSnackBar.show(
-                    context,
-                    message: 'Activation Failed: $e',
-                    isError: true,
-                  );
+                  if (context.mounted) {
+                    OneAuthSnackBar.show(
+                      context,
+                      message: 'Activation Failed: $e',
+                      isError: true,
+                    );
+                  }
                 }
               },
             ),
