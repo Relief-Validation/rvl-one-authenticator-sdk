@@ -1,3 +1,5 @@
+import 'package:flutter/widgets.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:dio/dio.dart';
 
 import '../one_auth.dart';
@@ -7,7 +9,27 @@ abstract class OneAuthInterface {
     String? clientSecret,
     String? baseUrl,
     String? bankId,
+    FirebaseOptions? firebaseOptions,
+    GlobalKey<NavigatorState>? navigatorKey,
   });
+
+  /// Optional global NavigatorKey allowing OneAuth to present Push Approval screens automatically.
+  GlobalKey<NavigatorState>? get navigatorKey;
+
+  /// Stream of incoming push notification transaction challenge payloads.
+  Stream<Map<String, dynamic>> get onPushChallengeReceived;
+
+  /// Retrieves and securely stores the active FCM device token.
+  Future<String?> getFcmToken();
+
+  /// Retrieves stored FCM token or fetches a fresh one and persists it securely.
+  Future<String?> getOrCreateFcmToken();
+
+  /// Retrieves the stored FCM token from secure storage.
+  Future<String?> getStoredFcmToken();
+
+  /// Persists certificate, serial, authenticatorUserId, and tokens returned after API success.
+  Future<void> persistEnrollmentResult(Map<String, dynamic> responseData);
 
   /// Fetches an enrollment nonce for the current user.
   Future<Map<String, dynamic>> getEnrollmentNonce([String? userId]);

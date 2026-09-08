@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import '../core/secure_id_manager.dart';
 import '../widgets/app_bar.dart';
 import '../widgets/primary_button.dart';
 import '../models/user.dart';
@@ -28,6 +30,12 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
   late AnimationController _controller;
   late Animation<Offset> _slideAnimation;
 
+  bool _isSubmitting = false;
+  bool _isVerifying = false;
+  String? _messageId;
+  List<int> _numberChoices = [108, 42, 85];
+  StreamSubscription? _pushSubscription;
+
   @override
   void initState() {
     super.initState();
@@ -43,12 +51,139 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
       parent: _controller,
       curve: Curves.elasticOut,
     ));
+
+    // Listen for incoming FCM push challenge details
+    _pushSubscription = OneAuth().onPushChallengeReceived.listen((data) {
+      debugPrint('OneAuth PushSetupScreen: Received Push Data: $data');
+      if (mounted) {
+        setState(() {
+          _messageId = data['messageId'] ?? data['message_id'] ?? data['customerUniqueKey'];
+          if (data['numberMatchingCode'] != null) {
+            final code = int.tryParse(data['numberMatchingCode'].toString()) ?? 108;
+            final choice2 = (code + 17) % 150 + 10;
+            final choice3 = (code + 43) % 150 + 10;
+            _numberChoices = [code, choice2, choice3];
+          }
+        });
+      }
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _submitCsr();
+    });
   }
 
   @override
   void dispose() {
+    _pushSubscription?.cancel();
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _submitCsr() async {
+    if (_isSubmitting) return;
+    setState(() => _isSubmitting = true);
+
+    try {
+      await OneAuth().submitCsr(
+        widget.user.copyWith(
+          preferredAuthenticationType: widget.type == PushSetupType.matching
+              ? 'NUMBER_MATCHING'
+              : 'PUSH',
+        ),
+      );
+      debugPrint('OneAuth: submitCsr completed automatically on load.');
+    } catch (e) {
+      debugPrint('OneAuth: submitCsr failed: $e');
+      if (mounted) {
+        OneAuthSnackBar.show(
+          context,
+          message: 'Activation Failed: $e',
+          isError: true,
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
+  Future<void> _verifySelectedNumber(int selectedNumber) async {
+    if (_isVerifying) return;
+    setState(() => _isVerifying = true);
+
+    try {
+      final deviceUuid = await OneAuthSecureIdManager.getOrCreateDeviceUuid();
+      final fcmToken = await OneAuth().getOrCreateFcmToken();
+
+      final payload = <String, dynamic>{
+        "messageId": _messageId ?? 'msg_${DateTime.now().millisecondsSinceEpoch}',
+        "deviceUuid": deviceUuid,
+        "fcmToken": fcmToken,
+        "preferredAuthenticationType": "NUMBER_MATCHING",
+        "number": selectedNumber.toString(),
+      };
+
+      debugPrint('OneAuth: Calling /verify with payload: $payload');
+
+      final response = await OneAuth().dio.post(
+        '/enrollment/verify',
+        data: payload,
+      );
+
+      debugPrint('OneAuth: /verify response: ${response.data}');
+
+      if (response.data is Map<String, dynamic>) {
+        await OneAuth().persistEnrollmentResult(response.data as Map<String, dynamic>);
+      }
+
+      if (mounted) {
+        OneAuthSnackBar.show(context, message: 'Number Matching Verified ($selectedNumber)!');
+        widget.onComplete();
+      }
+    } catch (e) {
+      debugPrint('OneAuth: /verify failed: $e');
+      if (mounted) {
+        OneAuthSnackBar.show(
+          context,
+          message: 'Verification Failed: $e',
+          isError: true,
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isVerifying = false);
+      }
+    }
+  }
+
+  Widget _buildNumberBox(int n) {
+    return GestureDetector(
+      onTap: _isVerifying ? null : () => _verifySelectedNumber(n),
+      child: Container(
+        width: 60,
+        height: 38,
+        decoration: BoxDecoration(
+          color: const Color(0xFFE8EEF5),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: const Color(0xFF1E293B),
+            width: 1.2,
+          ),
+        ),
+        child: Center(
+          child: Text(
+            '$n',
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -56,7 +191,7 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
     final bool isMatching = widget.type == PushSetupType.matching;
     final String title = isMatching ? 'Number Matching' : 'Push Approval';
     final String description = isMatching
-        ? 'You will receive a notification and must select the matching number shown on your login screen to approve.'
+        ? 'Tap the matching number below that corresponds to your notification banner to verify.'
         : 'You will receive a notification with "Approve" or "Deny" buttons on your screen to authorize requests.';
 
     return Scaffold(
@@ -104,7 +239,7 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
                             right: 0,
                             child: Column(
                               children: [
-                                Icon(Icons.lock_outline, size: 40, color: Colors.grey),
+                                Icon(Icons.shield_outlined, size: 40, color: Colors.grey),
                                 SizedBox(height: 10),
                                 Text('10:45', style: TextStyle(fontSize: 48, color: Colors.grey, fontWeight: FontWeight.w300)),
                                 Text('Monday, August 18', style: TextStyle(fontSize: 14, color: Colors.grey)),
@@ -123,7 +258,11 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(12),
                                   boxShadow: [
-                                    BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 4)),
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.1),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
+                                    ),
                                   ],
                                 ),
                                 child: Column(
@@ -134,8 +273,13 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
                                         Container(
                                           width: 24,
                                           height: 24,
-                                          decoration: const BoxDecoration(color: OneAuthColors.primaryBlue, shape: BoxShape.circle),
-                                          child: const Center(child: Text('1', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))),
+                                          decoration: const BoxDecoration(
+                                            color: OneAuthColors.primaryBlue,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Center(
+                                            child: Text('1', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                                          ),
                                         ),
                                         const SizedBox(width: 8),
                                         const Text('OneAuth', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
@@ -145,23 +289,28 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
                                     ),
                                     const SizedBox(height: 8),
                                     Text(
-                                      isMatching ? 'Match the number: 42' : 'Approve login request?',
+                                      isMatching
+                                          ? 'Tap the matching number:'
+                                          : 'Approve login request?',
                                       style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
                                     ),
                                     const SizedBox(height: 12),
+
+                                    // Number Matching Options styled like design
                                     if (isMatching)
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                        children: [42, 17, 85].map((n) => Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                          decoration: BoxDecoration(
-                                            border: Border.all(color: n == 42 ? OneAuthColors.primaryBlue : Colors.grey[300]!),
-                                            borderRadius: BorderRadius.circular(4),
-                                            color: n == 42 ? OneAuthColors.primaryBlue.withValues(alpha: 0.1) : null,
-                                          ),
-                                          child: Text('$n', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: n == 42 ? OneAuthColors.primaryBlue : Colors.black)),
-                                        )).toList(),
-                                      )
+                                      _isVerifying
+                                          ? const Padding(
+                                              padding: EdgeInsets.all(8.0),
+                                              child: SizedBox(
+                                                height: 20,
+                                                width: 20,
+                                                child: CircularProgressIndicator(strokeWidth: 2),
+                                              ),
+                                            )
+                                          : Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                              children: _numberChoices.map((n) => _buildNumberBox(n)).toList(),
+                                            )
                                     else
                                       Row(
                                         mainAxisAlignment: MainAxisAlignment.end,
@@ -185,32 +334,16 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: OneAuthPrimaryButton(
-              label: 'Activate $title',
-              onPressed: () async {
-                try {
-                  await OneAuth().submitCsr(
-                    widget.user.copyWith(
-                      preferredAuthenticationType: widget.type == PushSetupType.matching
-                          ? 'NUMBER_MATCHING'
-                          : 'PUSH',
-                    ),
-                  );
-                  widget.onComplete();
-                } catch (e) {
-                  if (context.mounted) {
-                    OneAuthSnackBar.show(
-                      context,
-                      message: 'Activation Failed: $e',
-                      isError: true,
-                    );
-                  }
-                }
-              },
+
+          // Show bottom button ONLY for standard Push Approval (not for Number Matching)
+          if (!isMatching)
+            Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: OneAuthPrimaryButton(
+                label: _isSubmitting ? 'Activating Push Approval...' : 'Continue',
+                onPressed: _isSubmitting ? null : () => widget.onComplete(),
+              ),
             ),
-          ),
         ],
       ),
     );

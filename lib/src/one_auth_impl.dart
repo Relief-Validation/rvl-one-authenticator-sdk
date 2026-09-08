@@ -5,16 +5,21 @@ import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:package_info_plus/package_info_plus.dart' as pkg;
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:uuid/uuid.dart';
 import 'package:dio/dio.dart';
 import 'dart:io';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'one_auth_interface.dart';
 import 'models/user.dart';
 import 'api/dio_client.dart';
 import 'core/env.dart';
 import 'core/exceptions.dart';
 import 'core/csr_manager.dart';
+import 'core/push_manager.dart';
+import 'core/secure_id_manager.dart';
+import 'screens/pin_verification_screen.dart';
+import 'screens/push_setup_screen.dart';
 import 'package:freerasp/freerasp.dart';
 
 class OneAuth implements OneAuthInterface {
@@ -37,6 +42,9 @@ class OneAuth implements OneAuthInterface {
   String? _nonceBase64;
   String? _authenticatorUserId;
   late DioClient _dioClient;
+  final OneAuthPushManager _pushManager = OneAuthPushManager();
+  GlobalKey<NavigatorState>? _navigatorKey;
+
   bool _isInitialized = false;
   bool _isFreeRASPStarted = false;
   bool _isFreeRASPListenerAttached = false;
@@ -55,6 +63,22 @@ class OneAuth implements OneAuthInterface {
 
   @override
   Dio get dio => _dioClient.dio;
+
+  @override
+  GlobalKey<NavigatorState>? get navigatorKey => _navigatorKey;
+
+  @override
+  Stream<Map<String, dynamic>> get onPushChallengeReceived =>
+      _pushManager.onPushChallengeReceived;
+
+  @override
+  Future<String?> getFcmToken() => _pushManager.getFcmToken();
+
+  @override
+  Future<String?> getOrCreateFcmToken() => _pushManager.getOrCreateFcmToken();
+
+  @override
+  Future<String?> getStoredFcmToken() => _pushManager.getStoredFcmToken();
 
   @override
   void setUserToken(String? token) {
@@ -110,6 +134,8 @@ class OneAuth implements OneAuthInterface {
     String? clientSecret,
     String? baseUrl,
     String? bankId,
+    FirebaseOptions? firebaseOptions,
+    GlobalKey<NavigatorState>? navigatorKey,
   }) async {
     if (_isInitialized) {
       debugPrint('OneAuth: SDK already initialized.');
@@ -117,6 +143,7 @@ class OneAuth implements OneAuthInterface {
     }
     debugPrint('OneAuth: Initializing Client SDK...');
 
+    _navigatorKey = navigatorKey;
     _clientSecret = clientSecret;
     _baseUrl = baseUrl ?? Env.baseUrl;
     // _bankId = bankId ?? Env.bankId;
@@ -143,8 +170,60 @@ class OneAuth implements OneAuthInterface {
 
     await _authenticateClient();
 
+    // Initialize FCM Push Manager internally
+    await _pushManager.initialize(
+      dioClient: _dioClient,
+      firebaseOptions: firebaseOptions,
+    );
+
+    // Listen for incoming Push Challenges and auto-navigate if navigatorKey is set
+    _pushManager.onPushChallengeReceived.listen((data) {
+      _handleAutoNavigationForPushChallenge(data);
+    });
+
     _isInitialized = true;
     debugPrint('OneAuth: SDK Initialization Complete.');
+  }
+
+  void _handleAutoNavigationForPushChallenge(Map<String, dynamic> data) {
+    if (_navigatorKey?.currentState == null) return;
+
+    final txnId = data['txnId'];
+    final txnHash = data['txnHash'];
+    final authType = data['authType'] ?? 'PUSH';
+
+    if (txnId == null || txnHash == null) return;
+
+    debugPrint('OneAuth: Auto-navigating to push challenge verification screen...');
+
+    if (authType == 'PUSH') {
+      _navigatorKey!.currentState!.push(
+        MaterialPageRoute(
+          builder: (_) => OneAuthPushSetupScreen(
+            type: data['numberMatchingCode'] != null
+                ? PushSetupType.matching
+                : PushSetupType.approval,
+            user: OneAuthUser(id: _authenticatorUserId ?? '', name: '', email: ''),
+            onComplete: () {
+              _navigatorKey?.currentState?.pop();
+            },
+          ),
+        ),
+      );
+    } else {
+      _navigatorKey!.currentState!.push(
+        MaterialPageRoute(
+          builder: (_) => OneAuthPinVerificationScreen(
+            txnId: txnId,
+            txnHash: txnHash,
+            pinLength: authType == 'TOTP' ? 6 : 4,
+            onComplete: () {
+              _navigatorKey?.currentState?.pop();
+            },
+          ),
+        ),
+      );
+    }
   }
 
   void _handleSessionExpired() {
@@ -347,20 +426,6 @@ class OneAuth implements OneAuthInterface {
     }
   }
 
-  Future<String> _getOrCreateId(String key, String prefix, {bool isAuthId = false}) async {
-    String? id = await _secureStorage.read(key: key);
-    if (id == null) {
-      if (isAuthId) {
-        final suffix = const Uuid().v4().replaceAll('-', '').substring(0, 12).toUpperCase();
-        id = '$prefix$suffix';
-      } else {
-        id = '$prefix${const Uuid().v4()}';
-      }
-      await _secureStorage.write(key: key, value: id);
-    }
-    return id;
-  }
-
   @override
   Future<Map<String, dynamic>> enroll(OneAuthUser user) async {
     _ensureInitialized();
@@ -403,9 +468,8 @@ class OneAuth implements OneAuthInterface {
     try {
       // Ensure we have a persistent formatted ID (Generated if missing)
       final authenticatorUserId = await _getOrCreateAuthenticatorId(user.id);
-      final deviceUuid = await _getOrCreateId('device_uuid', '');
-      final appInstanceId =
-          await _getOrCreateId('app_instance_id', 'instance-');
+      final deviceUuid = await OneAuthSecureIdManager.getOrCreateDeviceUuid();
+      final appInstanceId = await OneAuthSecureIdManager.getOrCreateAppInstanceId();
 
       // Validation: Ensure DOB is in YYYY-MM-DD format
       if (user.dob != null && !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(user.dob!)) {
@@ -447,8 +511,17 @@ class OneAuth implements OneAuthInterface {
 
       if (user.preferredAuthenticationType == 'TOTP') {
         payload["totpCode"] = user.totpCode ?? user.pin;
-      } else {
+      }
+      if (user.preferredAuthenticationType == 'PIN') {
         payload["pinCode"] = user.pin;
+      }
+      if (user.preferredAuthenticationType == 'NUMBER_MATCHING' ||
+          user.preferredAuthenticationType == 'PUSH' ||
+          user.preferredAuthenticationType == 'BIOMETRIC') {
+        final fcmToken = await getOrCreateFcmToken();
+        if (fcmToken != null && fcmToken.isNotEmpty) {
+          payload["fcmToken"] = fcmToken;
+        }
       }
 
       developer.log('OCSR with payload: $payload', name: 'OneAuth');
@@ -470,36 +543,12 @@ class OneAuth implements OneAuthInterface {
       _sessionToken = null;
       _nonceBase64 = null;
 
-      // Step 11: Persist the issued certificate and identifiers
-      final data = response.data;
-      final issuedCert =
-          data['certificatePem'] ?? data['data']?['certificatePem'];
-      final certificateSerial =
-          data['certificateSerial'] ?? data['data']?['certificateSerial'];
-      
-      // Use server-provided ID if available, otherwise fall back to user-provided ID
-      final serverCustomerId = data['authenticatorUserId'] ??
-          data['data']?['authenticatorUserId'] ??
-          authenticatorUserId;
-
-      _authenticatorUserId = serverCustomerId;
-
-      if (issuedCert != null) {
-        await _secureStorage.write(
-            key: 'issued_certificate', value: issuedCert);
-        debugPrint('OneAuth: Issued certificate saved to secure storage.');
-      }
-
-      if (certificateSerial != null) {
-        await _secureStorage.write(
-            key: 'certificate_serial', value: certificateSerial.toString());
-        debugPrint('OneAuth: Certificate serial saved to secure storage.');
-      }
-
-      await _secureStorage.write(key: 'authenticatorUserId', value: serverCustomerId);
+      // Persist the issued certificate, serial, and identifiers
+      final data = response.data is Map<String, dynamic> ? response.data : <String, dynamic>{};
+      await persistEnrollmentResult(data);
       await _secureStorage.write(key: 'device_uuid', value: deviceUuid);
       
-      debugPrint('OneAuth: CSR submitted successfully. Customer ID: $serverCustomerId');
+      debugPrint('OneAuth: CSR submitted and response persisted successfully.');
       return data;
     } on DioException catch (e) {
       debugPrint('OneAuth: CSR Submission Failed: ${e.message}');
@@ -508,6 +557,45 @@ class OneAuth implements OneAuthInterface {
         statusCode: e.response?.statusCode,
         originalError: e,
       );
+    }
+  }
+
+  @override
+  Future<void> persistEnrollmentResult(Map<String, dynamic> responseData) async {
+    final data = responseData['data'] is Map<String, dynamic>
+        ? responseData['data'] as Map<String, dynamic>
+        : responseData;
+
+    final issuedCert = data['certificatePem'] ?? data['certificate_pem'];
+    final certificateSerial = data['certificateSerial'] ?? data['certificate_serial'];
+    final serverCustomerId = data['authenticatorUserId'] ?? data['authenticator_user_id'];
+    final fcmToken = data['fcmToken'] ?? data['fcm_token'];
+    final deviceUuid = data['deviceUuid'] ?? data['device_uuid'];
+
+    if (issuedCert != null && issuedCert.toString().isNotEmpty) {
+      await _secureStorage.write(key: 'issued_certificate', value: issuedCert.toString());
+      debugPrint('OneAuth: Saved issued_certificate to secure storage.');
+    }
+
+    if (certificateSerial != null) {
+      await _secureStorage.write(key: 'certificate_serial', value: certificateSerial.toString());
+      debugPrint('OneAuth: Saved certificate_serial to secure storage.');
+    }
+
+    if (serverCustomerId != null && serverCustomerId.toString().isNotEmpty) {
+      _authenticatorUserId = serverCustomerId.toString();
+      await _secureStorage.write(key: 'authenticatorUserId', value: serverCustomerId.toString());
+      debugPrint('OneAuth: Saved authenticatorUserId ($serverCustomerId) to secure storage.');
+    }
+
+    if (fcmToken != null && fcmToken.toString().isNotEmpty) {
+      await _secureStorage.write(key: 'fcm_token', value: fcmToken.toString());
+      debugPrint('OneAuth: Saved fcm_token to secure storage.');
+    }
+
+    if (deviceUuid != null && deviceUuid.toString().isNotEmpty) {
+      await _secureStorage.write(key: 'device_uuid', value: deviceUuid.toString());
+      debugPrint('OneAuth: Saved device_uuid to secure storage.');
     }
   }
 
