@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../core/secure_id_manager.dart';
 import '../widgets/app_bar.dart';
-import '../widgets/primary_button.dart';
 import '../models/user.dart';
 import '../one_auth_impl.dart';
 import '../core/theme.dart';
@@ -93,6 +91,10 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
         ),
       );
       debugPrint('OneAuth: submitCsr completed automatically on load.');
+      if (mounted && widget.type == PushSetupType.approval) {
+        OneAuthSnackBar.show(context, message: 'Push Approval Activated!');
+        widget.onComplete();
+      }
     } catch (e) {
       debugPrint('OneAuth: submitCsr failed: $e');
       if (mounted) {
@@ -114,29 +116,10 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
     setState(() => _isVerifying = true);
 
     try {
-      final deviceUuid = await OneAuthSecureIdManager.getOrCreateDeviceUuid();
-      final fcmToken = await OneAuth().getOrCreateFcmToken();
-
-      final payload = <String, dynamic>{
-        "messageId": _messageId ?? 'msg_${DateTime.now().millisecondsSinceEpoch}',
-        "deviceUuid": deviceUuid,
-        "fcmToken": fcmToken,
-        "preferredAuthenticationType": "NUMBER_MATCHING",
-        "number": selectedNumber.toString(),
-      };
-
-      debugPrint('OneAuth: Calling /verify with payload: $payload');
-
-      final response = await OneAuth().dio.post(
-        '/enrollment/verify',
-        data: payload,
+      await OneAuth().verifyNumberMatching(
+        selectedNumber: selectedNumber.toString(),
+        messageId: _messageId,
       );
-
-      debugPrint('OneAuth: /verify response: ${response.data}');
-
-      if (response.data is Map<String, dynamic>) {
-        await OneAuth().persistEnrollmentResult(response.data as Map<String, dynamic>);
-      }
 
       if (mounted) {
         OneAuthSnackBar.show(context, message: 'Number Matching Verified ($selectedNumber)!');
@@ -162,21 +145,21 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
     return GestureDetector(
       onTap: _isVerifying ? null : () => _verifySelectedNumber(n),
       child: Container(
-        width: 60,
-        height: 38,
+        width: 72,
+        height: 48,
         decoration: BoxDecoration(
           color: const Color(0xFFE8EEF5),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: const Color(0xFF1E293B),
-            width: 1.2,
+            width: 1.5,
           ),
         ),
         child: Center(
           child: Text(
             '$n',
             style: const TextStyle(
-              fontSize: 16,
+              fontSize: 22,
               fontWeight: FontWeight.bold,
               color: Color(0xFF0F172A),
             ),
@@ -189,7 +172,7 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
   @override
   Widget build(BuildContext context) {
     final bool isMatching = widget.type == PushSetupType.matching;
-    final String title = isMatching ? 'Number Matching' : 'Push Approval';
+    final String title = isMatching ? 'Number Matching Setup' : 'Push Approval Setup';
     final String description = isMatching
         ? 'Tap the matching number below that corresponds to your notification banner to verify.'
         : 'You will receive a notification with "Approve" or "Deny" buttons on your screen to authorize requests.';
@@ -206,6 +189,7 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
                 children: [
                   Text(
                     title,
+                    textAlign: TextAlign.center,
                     style: OneAuthTheme.headingStyle(context),
                   ),
                   const SizedBox(height: 16),
@@ -214,40 +198,73 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
                     textAlign: TextAlign.center,
                     style: OneAuthTheme.subHeadingStyle(context),
                   ),
-                  const SizedBox(height: 40),
-                  
-                  // Animation Area
+                  const SizedBox(height: 30),
+
+                  if (isMatching) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                      decoration: BoxDecoration(
+                        color: OneAuthColors.primaryBlue.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: OneAuthColors.primaryBlue, width: 1.5),
+                      ),
+                      child: Column(
+                        children: [
+                          const Text(
+                            'MATCHING NUMBERS',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: OneAuthColors.primaryBlue,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          _isVerifying
+                              ? const SizedBox(
+                                  height: 48,
+                                  child: Center(
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                )
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                  children: _numberChoices.map((n) => _buildNumberBox(n)).toList(),
+                                ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+                  ],
+
+                  // Mock Animated Phone Display
                   Center(
                     child: Container(
                       width: 240,
-                      height: 380,
+                      height: 300,
                       decoration: BoxDecoration(
                         color: OneAuthTheme.isDarkMode(context) ? Colors.grey[900] : Colors.grey[200],
                         borderRadius: BorderRadius.circular(30),
                         border: Border.all(
-                          color: OneAuthTheme.isDarkMode(context) ? Colors.grey[800]! : Colors.grey[400]!, 
+                          color: OneAuthTheme.isDarkMode(context) ? Colors.grey[800]! : Colors.grey[400]!,
                           width: 4,
                         ),
                       ),
                       child: Stack(
                         clipBehavior: Clip.none,
                         children: [
-                          // Mock Phone Screen Content
                           const Positioned(
                             top: 40,
                             left: 0,
                             right: 0,
                             child: Column(
                               children: [
-                                Icon(Icons.shield_outlined, size: 40, color: Colors.grey),
-                                SizedBox(height: 10),
-                                Text('10:45', style: TextStyle(fontSize: 48, color: Colors.grey, fontWeight: FontWeight.w300)),
-                                Text('Monday, August 18', style: TextStyle(fontSize: 14, color: Colors.grey)),
+                                Text('Push Notification', style: TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.bold)),
                               ],
                             ),
                           ),
-                          
-                          // Sliding Notification
+
+                          // Sliding Notification Mockup
                           SlideTransition(
                             position: _slideAnimation,
                             child: Padding(
@@ -271,8 +288,8 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
                                     Row(
                                       children: [
                                         Container(
-                                          width: 24,
-                                          height: 24,
+                                          width: 20,
+                                          height: 20,
                                           decoration: const BoxDecoration(
                                             color: OneAuthColors.primaryBlue,
                                             shape: BoxShape.circle,
@@ -282,44 +299,29 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
                                           ),
                                         ),
                                         const SizedBox(width: 8),
-                                        const Text('OneAuth', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                        const Text('OneAuth', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
                                         const Spacer(),
-                                        const Text('now', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                                        const Text('now', style: TextStyle(fontSize: 9, color: Colors.grey)),
                                       ],
                                     ),
-                                    const SizedBox(height: 8),
+                                    const SizedBox(height: 6),
                                     Text(
                                       isMatching
-                                          ? 'Tap the matching number:'
+                                          ? 'Tap matching number in app'
                                           : 'Approve login request?',
-                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
                                     ),
-                                    const SizedBox(height: 12),
-
-                                    // Number Matching Options styled like design
-                                    if (isMatching)
-                                      _isVerifying
-                                          ? const Padding(
-                                              padding: EdgeInsets.all(8.0),
-                                              child: SizedBox(
-                                                height: 20,
-                                                width: 20,
-                                                child: CircularProgressIndicator(strokeWidth: 2),
-                                              ),
-                                            )
-                                          : Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                              children: _numberChoices.map((n) => _buildNumberBox(n)).toList(),
-                                            )
-                                    else
+                                    if (!isMatching) ...[
+                                      const SizedBox(height: 8),
                                       Row(
                                         mainAxisAlignment: MainAxisAlignment.end,
                                         children: [
-                                          Text('Deny', style: TextStyle(color: Colors.red[700], fontSize: 12, fontWeight: FontWeight.bold)),
-                                          const SizedBox(width: 16),
-                                          const Text('Approve', style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold)),
+                                          Text('Deny', style: TextStyle(color: Colors.red[700], fontSize: 11, fontWeight: FontWeight.bold)),
+                                          const SizedBox(width: 12),
+                                          const Text('Approve', style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold)),
                                         ],
                                       ),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -329,21 +331,10 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
                       ),
                     ),
                   ),
-                  const SizedBox(height: 40),
                 ],
               ),
             ),
           ),
-
-          // Show bottom button ONLY for standard Push Approval (not for Number Matching)
-          if (!isMatching)
-            Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: OneAuthPrimaryButton(
-                label: _isSubmitting ? 'Activating Push Approval...' : 'Continue',
-                onPressed: _isSubmitting ? null : () => widget.onComplete(),
-              ),
-            ),
         ],
       ),
     );

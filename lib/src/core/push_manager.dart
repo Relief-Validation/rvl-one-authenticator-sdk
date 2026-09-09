@@ -6,17 +6,18 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'secure_id_manager.dart';
 import '../api/dio_client.dart';
+import 'env.dart';
 
 /// Default Firebase Options configured for OneAuth SDK
 const defaultOneAuthFirebaseOptions = FirebaseOptions(
-  apiKey: "AIzaSyDBwRFJA2r2mNAGvjouqrurNey4U0Rzl7o",
-  appId: "1:589487041208:android:9fadf6ce4ac07d10daa24d",
-  messagingSenderId: "589487041208",
-  projectId: "one-authenticator",
+  apiKey: Env.firebaseApiKey,
+  appId: Env.firebaseAppId,
+  messagingSenderId: Env.firebaseMessagingSenderId,
+  projectId: Env.firebaseProjectId,
 );
 
 const AndroidNotificationChannel _highImportanceChannel = AndroidNotificationChannel(
-  'high_importance_channel',
+  'one_auth_high_importance_channel',
   'High Importance Notifications',
   description: 'This channel is used for important transaction challenge notifications.',
   importance: Importance.max,
@@ -43,6 +44,37 @@ Future<void> _oneAuthBackgroundMessageHandler(RemoteMessage message) async {
     await Firebase.initializeApp(options: defaultOneAuthFirebaseOptions);
   }
   _logRawRemoteMessage(message, 'Background');
+
+  // Trigger local notification for background data-only payloads
+  if (message.notification == null && message.data.isNotEmpty) {
+    try {
+      final FlutterLocalNotificationsPlugin localNotifications = FlutterLocalNotificationsPlugin();
+      const androidInitSettings = AndroidInitializationSettings('ic_one_auth_notification');
+      const initSettings = InitializationSettings(android: androidInitSettings);
+      await localNotifications.initialize(initSettings);
+
+      final title = message.data['title'] ?? 'OneAuth Challenge';
+      final body = message.data['body'] ?? message.data['message'] ?? 'Approve transaction challenge';
+
+      await localNotifications.show(
+        message.hashCode,
+        title,
+        body,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'one_auth_high_importance_channel',
+            'High Importance Notifications',
+            channelDescription: 'This channel is used for important transaction challenge notifications.',
+            importance: Importance.max,
+            priority: Priority.high,
+            icon: 'ic_one_auth_notification',
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('OneAuth SDK: Background Local Notification error: $e');
+    }
+  }
 }
 
 /// Manages all Firebase Cloud Messaging (FCM) operations for the OneAuth SDK.
@@ -53,9 +85,14 @@ class OneAuthPushManager {
   final StreamController<Map<String, dynamic>> _challengeStreamController =
       StreamController<Map<String, dynamic>>.broadcast();
 
+  Map<String, dynamic>? _latestChallengeData;
+
   /// Stream of incoming transaction challenge push notification payloads
   Stream<Map<String, dynamic>> get onPushChallengeReceived =>
       _challengeStreamController.stream;
+
+  /// Retrieves the most recent push challenge payload received by the SDK.
+  Map<String, dynamic>? get latestChallengeData => _latestChallengeData;
 
   /// Initializes FCM, requests permissions, and sets up notification listeners internally.
   Future<void> initialize({
@@ -83,7 +120,7 @@ class OneAuthPushManager {
       }
 
       // 3. Initialize Local Notifications Plugin & High Importance Channel
-      const androidInitSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const androidInitSettings = AndroidInitializationSettings('ic_one_auth_notification');
       const initSettings = InitializationSettings(android: androidInitSettings);
       await _localNotifications.initialize(initSettings);
 
@@ -102,7 +139,7 @@ class OneAuthPushManager {
       FirebaseMessaging.onBackgroundMessage(_oneAuthBackgroundMessageHandler);
 
       // 5. Sync FCM Token with OneAuth Server
-      await _syncFcmToken(dioClient);
+      await syncFcmToken(dioClient);
 
       // 6. Auto-sync on Token Refresh
       _fcm.onTokenRefresh.listen((newToken) async {
@@ -116,23 +153,24 @@ class OneAuthPushManager {
         _logRawRemoteMessage(message, 'Foreground');
 
         final notification = message.notification;
-        if (notification != null) {
-          _localNotifications.show(
-            notification.hashCode,
-            notification.title ?? 'OneAuth Challenge',
-            notification.body ?? 'Approve transaction challenge',
-            NotificationDetails(
-              android: AndroidNotificationDetails(
-                _highImportanceChannel.id,
-                _highImportanceChannel.name,
-                channelDescription: _highImportanceChannel.description,
-                importance: Importance.max,
-                priority: Priority.high,
-                icon: '@mipmap/ic_launcher',
-              ),
+        final title = notification?.title ?? message.data['title'] ?? 'OneAuth Challenge';
+        final body = notification?.body ?? message.data['body'] ?? message.data['message'] ?? 'Approve transaction challenge';
+
+        _localNotifications.show(
+          message.hashCode,
+          title,
+          body,
+          NotificationDetails(
+            android: AndroidNotificationDetails(
+              _highImportanceChannel.id,
+              _highImportanceChannel.name,
+              channelDescription: _highImportanceChannel.description,
+              importance: Importance.max,
+              priority: Priority.high,
+              icon: 'ic_one_auth_notification',
             ),
-          );
-        }
+          ),
+        );
 
         _processPushData(message.data);
       });
@@ -157,11 +195,7 @@ class OneAuthPushManager {
 
   /// Retrieves the stored FCM token or fetches a fresh one from Firebase Messaging and stores it.
   Future<String?> getOrCreateFcmToken() async {
-    String? token = await _secureStorage.read(key: 'fcm_token');
-    if (token == null || token.isEmpty) {
-      token = await getFcmToken();
-    }
-    return token;
+    return await getFcmToken();
   }
 
   /// Retrieves current FCM Token from FCM and stores it securely for later use.
@@ -170,12 +204,12 @@ class OneAuthPushManager {
       final token = await _fcm.getToken();
       if (token != null && token.isNotEmpty) {
         await _secureStorage.write(key: 'fcm_token', value: token);
+        return token;
       }
-      return token;
     } catch (e) {
-      debugPrint('OneAuth SDK: Failed to get FCM token: $e');
-      return await getStoredFcmToken();
+      debugPrint('OneAuth SDK: Failed to get fresh FCM token: $e');
     }
+    return await getStoredFcmToken();
   }
 
   /// Retrieves the stored FCM token from secure storage.
@@ -183,7 +217,7 @@ class OneAuthPushManager {
     return await _secureStorage.read(key: 'fcm_token');
   }
 
-  Future<void> _syncFcmToken(DioClient dioClient) async {
+  Future<void> syncFcmToken(DioClient dioClient) async {
     final token = await getOrCreateFcmToken();
     if (token != null && token.isNotEmpty) {
       debugPrint('OneAuth SDK: Active FCM Token: $token');
@@ -219,6 +253,7 @@ class OneAuthPushManager {
         data.containsKey('action') ||
         data.containsKey('authenticationType')) {
       debugPrint('OneAuth SDK: Emitting FCM Challenge Payload: $data');
+      _latestChallengeData = data;
       _challengeStreamController.add(data);
     }
   }

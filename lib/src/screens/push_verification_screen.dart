@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../core/theme.dart';
 import '../widgets/app_bar.dart';
-import '../widgets/primary_button.dart';
 import '../widgets/snack_bar.dart';
 import '../one_auth_impl.dart';
 
@@ -30,7 +29,8 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
   late AnimationController _controller;
   late Animation<Offset> _slideAnimation;
   bool _isVerifying = false;
-  late List<String> _numberChoices;
+  String? _currentNumberMatchingCode;
+  List<String> _numberChoices = [];
   StreamSubscription? _pushSubscription;
 
   @override
@@ -49,18 +49,51 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
       curve: Curves.elasticOut,
     ));
 
-    final codeStr = widget.numberMatchingCode ?? '42';
+    _currentNumberMatchingCode = widget.numberMatchingCode;
+    if (_currentNumberMatchingCode != null && _currentNumberMatchingCode!.isNotEmpty) {
+      _updateNumberChoices(_currentNumberMatchingCode!);
+    } else {
+      final latestData = OneAuth().latestPushChallengeData;
+      if (latestData != null) {
+        final pushTxnId = latestData['txnId'];
+        if (pushTxnId == widget.txnId || widget.txnId.isEmpty) {
+          final pushCode = latestData['numberMatchingCode'] ?? latestData['number_matching_code'];
+          if (pushCode != null) {
+            _currentNumberMatchingCode = pushCode.toString();
+            _updateNumberChoices(_currentNumberMatchingCode!);
+          }
+        }
+      }
+    }
+
+    // Listen to FCM push challenge stream when incoming notification payload arrives
+    _pushSubscription = OneAuth().onPushChallengeReceived.listen((data) {
+      debugPrint('OneAuth PushVerificationScreen: Received FCM Challenge Data: $data');
+      final pushTxnId = data['txnId'];
+      if (pushTxnId == widget.txnId || widget.txnId.isEmpty) {
+        final pushCode = data['numberMatchingCode'] ?? data['number_matching_code'];
+        final authType = data['authenticationType'] ?? data['authType'];
+
+        if (pushCode != null || authType == 'NUMBER_MATCHING') {
+          final codeStr = pushCode?.toString() ?? '42';
+          if (mounted) {
+            setState(() {
+              _currentNumberMatchingCode = codeStr;
+              _updateNumberChoices(codeStr);
+            });
+          }
+        } else if (authType == 'PUSH' || data['action'] == 'APPROVE') {
+          _handleVerificationSuccess();
+        }
+      }
+    });
+  }
+
+  void _updateNumberChoices(String codeStr) {
     final codeInt = int.tryParse(codeStr) ?? 42;
     final choice2 = ((codeInt + 17) % 150 + 10).toString();
     final choice3 = ((codeInt + 43) % 150 + 10).toString();
     _numberChoices = [codeStr, choice2, choice3]..shuffle();
-
-    // Listen to FCM push challenge stream if a notification arrives
-    _pushSubscription = OneAuth().onPushChallengeReceived.listen((data) {
-      if (data['txnId'] == widget.txnId) {
-        _handleVerificationSuccess();
-      }
-    });
   }
 
   @override
@@ -78,9 +111,9 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
       await OneAuth().submitTransactionSignature(
         txnId: widget.txnId,
         txnHash: widget.txnHash,
-        pin: selectedNumber ?? widget.numberMatchingCode ?? 'PUSH_APPROVED',
-        authType: widget.numberMatchingCode != null ? 'NUMBER_MATCHING' : 'PUSH',
-        selectedNumberMatchingCode: selectedNumber ?? widget.numberMatchingCode,
+        pin: selectedNumber ?? _currentNumberMatchingCode ?? 'PUSH_APPROVED',
+        authType: _currentNumberMatchingCode != null ? 'NUMBER_MATCHING' : 'PUSH',
+        selectedNumberMatchingCode: selectedNumber ?? _currentNumberMatchingCode,
       );
 
       if (mounted) {
@@ -101,7 +134,7 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
   }
 
   Widget _buildNumberBox(String numStr) {
-    final bool isTarget = numStr == widget.numberMatchingCode;
+    final bool isTarget = numStr == _currentNumberMatchingCode;
     return GestureDetector(
       onTap: _isVerifying
           ? null
@@ -143,7 +176,7 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
 
   @override
   Widget build(BuildContext context) {
-    final bool isMatching = widget.numberMatchingCode != null;
+    final bool isMatching = _currentNumberMatchingCode != null;
     final String title = isMatching ? 'Number Matching Verification' : 'Push Approval Verification';
     final String description = isMatching
         ? 'Select the matching number shown below that corresponds to your notification banner to authorize.'
@@ -172,7 +205,7 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
                   ),
                   const SizedBox(height: 30),
 
-                  if (isMatching && widget.numberMatchingCode != null) ...[
+                  if (isMatching && _currentNumberMatchingCode != null) ...[
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
                       decoration: BoxDecoration(
@@ -192,10 +225,17 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
                             ),
                           ),
                           const SizedBox(height: 16),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: _numberChoices.map((n) => _buildNumberBox(n)).toList(),
-                          ),
+                          _isVerifying
+                              ? const SizedBox(
+                                  height: 48,
+                                  child: Center(
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                )
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                  children: _numberChoices.map((n) => _buildNumberBox(n)).toList(),
+                                ),
                         ],
                       ),
                     ),
@@ -219,13 +259,11 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
                         clipBehavior: Clip.none,
                         children: [
                           const Positioned(
-                            top: 30,
+                            top: 40,
                             left: 0,
                             right: 0,
                             child: Column(
                               children: [
-                                Icon(Icons.shield_outlined, size: 36, color: Colors.grey),
-                                SizedBox(height: 8),
                                 Text('Verification Sent', style: TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.bold)),
                               ],
                             ),
@@ -274,7 +312,7 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
                                     const SizedBox(height: 6),
                                     Text(
                                       isMatching
-                                          ? 'Select matching number: ${widget.numberMatchingCode ?? "42"}'
+                                          ? 'Select matching number on screen'
                                           : 'Approve transaction challenge?',
                                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
                                     ),
@@ -289,24 +327,6 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
                   ),
                 ],
               ),
-            ),
-          ),
-
-          Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              children: [
-                if (!isMatching)
-                  OneAuthPrimaryButton(
-                    label: _isVerifying ? 'Verifying...' : 'Simulate Push Approval',
-                    onPressed: _isVerifying ? null : () => _handleVerificationSuccess(),
-                  ),
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancel Transaction', style: TextStyle(color: Colors.grey)),
-                ),
-              ],
             ),
           ),
         ],

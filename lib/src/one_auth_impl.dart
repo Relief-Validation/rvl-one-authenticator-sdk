@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -41,6 +42,7 @@ class OneAuth implements OneAuthInterface {
   String? _sessionToken;
   String? _nonceBase64;
   String? _authenticatorUserId;
+  Map<String, dynamic>? _pendingEnrollmentData;
   late DioClient _dioClient;
   final OneAuthPushManager _pushManager = OneAuthPushManager();
   GlobalKey<NavigatorState>? _navigatorKey;
@@ -72,6 +74,13 @@ class OneAuth implements OneAuthInterface {
       _pushManager.onPushChallengeReceived;
 
   @override
+  Map<String, dynamic>? get latestPushChallengeData =>
+      _pushManager.latestChallengeData;
+
+  @override
+  Future<void> syncFcmToken() => _pushManager.syncFcmToken(_dioClient);
+
+  @override
   Future<String?> getFcmToken() => _pushManager.getFcmToken();
 
   @override
@@ -84,6 +93,9 @@ class OneAuth implements OneAuthInterface {
   void setUserToken(String? token) {
     _userToken = token;
     debugPrint('OneAuth: User Token updated.');
+    if (token != null && token.isNotEmpty && _isInitialized) {
+      syncFcmToken();
+    }
   }
 
   @override
@@ -543,12 +555,26 @@ class OneAuth implements OneAuthInterface {
       _sessionToken = null;
       _nonceBase64 = null;
 
-      // Persist the issued certificate, serial, and identifiers
       final data = response.data is Map<String, dynamic> ? response.data : <String, dynamic>{};
-      await persistEnrollmentResult(data);
       await _secureStorage.write(key: 'device_uuid', value: deviceUuid);
-      
-      debugPrint('OneAuth: CSR submitted and response persisted successfully.');
+
+      final authType = user.preferredAuthenticationType?.toUpperCase();
+      if (authType == 'TOTP' || authType == 'PIN') {
+        await persistEnrollmentResult(data);
+        debugPrint('OneAuth: CSR submitted and enrollment persisted for $authType.');
+      } else {
+        _pendingEnrollmentData = data;
+        try {
+          await _secureStorage.write(
+            key: 'pending_enrollment_data',
+            value: jsonEncode(data),
+          );
+        } catch (e) {
+          debugPrint('OneAuth Warning: Failed to save pending_enrollment_data: $e');
+        }
+        debugPrint('OneAuth: CSR submitted for $authType. Persistence deferred until verification success.');
+      }
+
       return data;
     } on DioException catch (e) {
       debugPrint('OneAuth: CSR Submission Failed: ${e.message}');
@@ -721,14 +747,17 @@ class OneAuth implements OneAuthInterface {
       "certificateSerial": certificateSerial,
       "txnHash": txnHash,
       "signatureBase64": signatureBase64,
-      // "selectedNumberMatchingCode": selectedNumberMatchingCode,
       "deviceIntegrity": finalIntegrity,
     };
 
     if (authType == 'TOTP' || (authType == null && pin.length == 6)) {
       payload["totpCode"] = pin;
-    } else {
+    }
+    if (authType == 'PIN' || (authType == null && pin.length == 4)) {
       payload["pinCode"] = pin;
+    }
+    if (authType == 'NUMBER_MATCHING') {
+      payload["numberMatchingCode"] = pin;
     }
 
     developer.log('submitTransactionSignature request: $payload', name: 'OneAuth');
@@ -799,6 +828,72 @@ class OneAuth implements OneAuthInterface {
 
       throw OneAuthNetworkException(
         e.message ?? 'Failed to check enrollment status',
+        statusCode: e.response?.statusCode,
+        originalError: e,
+      );
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> verifyNumberMatching({
+    required String selectedNumber,
+    String? messageId,
+  }) async {
+    _ensureInitialized();
+    final deviceUuid = await OneAuthSecureIdManager.getOrCreateDeviceUuid();
+    final fcmToken = await getOrCreateFcmToken();
+
+    final payload = <String, dynamic>{
+      "messageId": messageId ?? 'msg_${DateTime.now().millisecondsSinceEpoch}',
+      "deviceUuid": deviceUuid,
+      "fcmToken": fcmToken,
+      "preferredAuthenticationType": "NUMBER_MATCHING",
+      "number": selectedNumber,
+    };
+
+    debugPrint('OneAuth: Calling /verify with payload: $payload');
+
+    try {
+      final response = await _dioClient.dio.post(
+        '/enrollment/verify',
+        data: payload,
+      );
+
+      debugPrint('OneAuth: /verify response: ${response.data}');
+
+      // Retrieve pending CSR enrollment data if available
+      Map<String, dynamic> pendingData = {};
+      if (_pendingEnrollmentData != null) {
+        pendingData = _pendingEnrollmentData!;
+      } else {
+        final pendingJson = await _secureStorage.read(key: 'pending_enrollment_data');
+        if (pendingJson != null && pendingJson.isNotEmpty) {
+          try {
+            pendingData = jsonDecode(pendingJson) as Map<String, dynamic>;
+          } catch (e) {
+            debugPrint('OneAuth Warning: Failed to parse pending_enrollment_data: $e');
+          }
+        }
+      }
+
+      final responseData = response.data is Map<String, dynamic>
+          ? response.data as Map<String, dynamic>
+          : <String, dynamic>{};
+
+      final dataToPersist = <String, dynamic>{
+        ...pendingData,
+        ...responseData,
+      };
+
+      await persistEnrollmentResult(dataToPersist);
+      _pendingEnrollmentData = null;
+      await _secureStorage.delete(key: 'pending_enrollment_data');
+
+      return dataToPersist;
+    } on DioException catch (e) {
+      debugPrint('OneAuth: /verify failed: ${e.message}');
+      throw OneAuthNetworkException(
+        e.message ?? 'Number matching verification failed',
         statusCode: e.response?.statusCode,
         originalError: e,
       );

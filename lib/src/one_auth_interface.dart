@@ -19,6 +19,12 @@ abstract class OneAuthInterface {
   /// Stream of incoming push notification transaction challenge payloads.
   Stream<Map<String, dynamic>> get onPushChallengeReceived;
 
+  /// Retrieves the most recent push challenge payload received by the SDK.
+  Map<String, dynamic>? get latestPushChallengeData;
+
+  /// Syncs the active FCM token with the backend.
+  Future<void> syncFcmToken();
+
   /// Retrieves and securely stores the active FCM device token.
   Future<String?> getFcmToken();
 
@@ -75,4 +81,10 @@ abstract class OneAuthInterface {
 
   /// Checks the enrollment status of the device.
   Future<Map<String, dynamic>> checkEnrollmentStatus();
+
+  /// Verifies selected number matching code during enrollment / setup.
+  Future<Map<String, dynamic>> verifyNumberMatching({
+    required String selectedNumber,
+    String? messageId,
+  });
 }
