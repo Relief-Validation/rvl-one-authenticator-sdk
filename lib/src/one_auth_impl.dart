@@ -74,6 +74,10 @@ class OneAuth implements OneAuthInterface {
       _pushManager.onPushChallengeReceived;
 
   @override
+  void notifyChallengeReceived(Map<String, dynamic> data) =>
+      _pushManager.notifyChallengeReceived(data);
+
+  @override
   Map<String, dynamic>? get latestPushChallengeData =>
       _pushManager.latestChallengeData;
 
@@ -528,8 +532,7 @@ class OneAuth implements OneAuthInterface {
         payload["pinCode"] = user.pin;
       }
       if (user.preferredAuthenticationType == 'NUMBER_MATCHING' ||
-          user.preferredAuthenticationType == 'PUSH' ||
-          user.preferredAuthenticationType == 'BIOMETRIC') {
+          user.preferredAuthenticationType == 'PUSH') {
         final fcmToken = await getOrCreateFcmToken();
         if (fcmToken != null && fcmToken.isNotEmpty) {
           payload["fcmToken"] = fcmToken;
@@ -690,6 +693,7 @@ class OneAuth implements OneAuthInterface {
     required String pin,
     String? authType,
     String? selectedNumberMatchingCode,
+    String? userResponse,
   }) async {
     _ensureInitialized();
     
@@ -759,6 +763,11 @@ class OneAuth implements OneAuthInterface {
     if (authType == 'NUMBER_MATCHING') {
       payload["numberMatchingCode"] = pin;
     }
+    if (userResponse != null && userResponse.isNotEmpty) {
+      payload["userResponse"] = userResponse;
+    } else if (authType == 'PUSH' || authType == 'BIOMETRIC') {
+      payload["userResponse"] = 'true';
+    }
 
     developer.log('submitTransactionSignature request: $payload', name: 'OneAuth');
 
@@ -770,6 +779,18 @@ class OneAuth implements OneAuthInterface {
       developer.log('submitTransactionSignature response: ${response.data}', name: 'OneAuth');
       
       final data = response.data;
+      final responseMap = (data is Map<String, dynamic>) ? data : <String, dynamic>{};
+      final statusStr = (userResponse == 'false' || (data != null && data['status'] == 'DECLINED'))
+          ? 'DECLINED'
+          : 'VERIFIED';
+
+      _pushManager.notifyChallengeReceived({
+        'status': statusStr,
+        'txnId': txnId,
+        'authType': authType,
+        ...responseMap,
+      });
+
       if (data != null && data['status'] == 'DECLINED') {
         final reason = data['reason'] ?? 'Transaction Declined';
         debugPrint('OneAuth: Transaction signature declined: $reason');
@@ -836,20 +857,33 @@ class OneAuth implements OneAuthInterface {
 
   @override
   Future<Map<String, dynamic>> verifyNumberMatching({
-    required String selectedNumber,
+    String? selectedNumber,
     String? messageId,
+    String? preferredAuthenticationType,
+    String? userResponse,
   }) async {
     _ensureInitialized();
     final deviceUuid = await OneAuthSecureIdManager.getOrCreateDeviceUuid();
     final fcmToken = await getOrCreateFcmToken();
 
+    final authType = preferredAuthenticationType ?? 'NUMBER_MATCHING';
+
     final payload = <String, dynamic>{
       "messageId": messageId ?? 'msg_${DateTime.now().millisecondsSinceEpoch}',
       "deviceUuid": deviceUuid,
       "fcmToken": fcmToken,
-      "preferredAuthenticationType": "NUMBER_MATCHING",
-      "number": selectedNumber,
+      "preferredAuthenticationType": authType,
     };
+
+    if (selectedNumber != null && selectedNumber.isNotEmpty) {
+      payload["number"] = selectedNumber;
+    }
+
+    if (userResponse != null && userResponse.isNotEmpty) {
+      payload["userResponse"] = userResponse;
+    } else if (authType == 'PUSH' || authType == 'BIOMETRIC') {
+      payload["userResponse"] = 'true';
+    }
 
     debugPrint('OneAuth: Calling /verify with payload: $payload');
 
@@ -888,6 +922,14 @@ class OneAuth implements OneAuthInterface {
       await persistEnrollmentResult(dataToPersist);
       _pendingEnrollmentData = null;
       await _secureStorage.delete(key: 'pending_enrollment_data');
+
+      final statusStr = (userResponse == 'false') ? 'DECLINED' : 'VERIFIED';
+      _pushManager.notifyChallengeReceived({
+        'status': statusStr,
+        'messageId': messageId,
+        'preferredAuthenticationType': authType,
+        ...dataToPersist,
+      });
 
       return dataToPersist;
     } on DioException catch (e) {

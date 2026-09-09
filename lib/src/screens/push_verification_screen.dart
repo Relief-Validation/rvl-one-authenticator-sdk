@@ -10,7 +10,7 @@ class OneAuthPushVerificationScreen extends StatefulWidget {
   final String txnId;
   final String txnHash;
   final String? numberMatchingCode;
-  final VoidCallback onComplete;
+  final dynamic onComplete;
 
   const OneAuthPushVerificationScreen({
     super.key,
@@ -32,6 +32,14 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
   String? _currentNumberMatchingCode;
   List<String> _numberChoices = [];
   StreamSubscription? _pushSubscription;
+
+  void _notifyComplete(bool success) {
+    if (widget.onComplete is Function(bool)) {
+      (widget.onComplete as Function(bool))(success);
+    } else if (widget.onComplete is Function()) {
+      (widget.onComplete as Function())();
+    }
+  }
 
   @override
   void initState() {
@@ -69,21 +77,31 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
     // Listen to FCM push challenge stream when incoming notification payload arrives
     _pushSubscription = OneAuth().onPushChallengeReceived.listen((data) {
       debugPrint('OneAuth PushVerificationScreen: Received FCM Challenge Data: $data');
-      final pushTxnId = data['txnId'];
-      if (pushTxnId == widget.txnId || widget.txnId.isEmpty) {
-        final pushCode = data['numberMatchingCode'] ?? data['number_matching_code'];
-        final authType = data['authenticationType'] ?? data['authType'];
+      if (mounted) {
+        final status = data['status']?.toString().toUpperCase();
+        final userResp = data['userResponse']?.toString();
+        if (status == 'VERIFIED' || status == 'SUCCESS' || status == 'APPROVED') {
+          OneAuthSnackBar.show(context, message: 'Push Verification Approved!');
+          _notifyComplete(true);
+          return;
+        } else if (status == 'DECLINED' || status == 'DENIED' || status == 'REJECTED' || status == 'FAILED' || userResp == 'false') {
+          OneAuthSnackBar.show(context, message: 'Push Verification Denied.', isError: true);
+          _notifyComplete(false);
+          return;
+        }
 
-        if (pushCode != null || authType == 'NUMBER_MATCHING') {
-          final codeStr = pushCode?.toString() ?? '42';
-          if (mounted) {
+        final pushTxnId = data['txnId'];
+        if (pushTxnId == widget.txnId || widget.txnId.isEmpty) {
+          final pushCode = data['numberMatchingCode'] ?? data['number_matching_code'];
+          final authType = data['authenticationType'] ?? data['authType'];
+
+          if (pushCode != null || authType == 'NUMBER_MATCHING') {
+            final codeStr = pushCode?.toString() ?? '42';
             setState(() {
               _currentNumberMatchingCode = codeStr;
               _updateNumberChoices(codeStr);
             });
           }
-        } else if (authType == 'PUSH' || data['action'] == 'APPROVE') {
-          _handleVerificationSuccess();
         }
       }
     });
@@ -118,7 +136,7 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
 
       if (mounted) {
         OneAuthSnackBar.show(context, message: 'Push Verification Approved!');
-        widget.onComplete();
+        _notifyComplete(true);
       }
     } catch (e) {
       if (mounted) {

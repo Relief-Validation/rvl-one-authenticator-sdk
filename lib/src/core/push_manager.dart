@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -6,6 +7,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'secure_id_manager.dart';
 import '../api/dio_client.dart';
+import '../one_auth_impl.dart';
 import 'env.dart';
 
 /// Default Firebase Options configured for OneAuth SDK
@@ -37,6 +39,91 @@ void _logRawRemoteMessage(RemoteMessage message, String source) {
   debugPrint('===========================================================================');
 }
 
+@pragma('vm:entry-point')
+void _oneAuthBackgroundNotificationResponseHandler(NotificationResponse response) async {
+  debugPrint('OneAuth: Background Notification Response tapped: actionId=${response.actionId}');
+  if (response.actionId == 'action_yes' || response.actionId == 'action_no') {
+    Map<String, dynamic> data = {};
+    if (response.payload != null && response.payload!.isNotEmpty) {
+      try {
+        data = jsonDecode(response.payload!) as Map<String, dynamic>;
+      } catch (_) {}
+    }
+    final messageId = data['messageId'] ?? data['message_id'] ?? data['customerUniqueKey'];
+    final txnId = data['txnId'] ?? data['txn_id'] ?? data['transactionId'];
+    final txnHash = data['txnHash'] ?? data['txn_hash'] ?? '';
+
+    if (txnId != null && txnId.toString().isNotEmpty) {
+      if (response.actionId == 'action_yes') {
+        debugPrint('OneAuth: Background YES tapped for txnId: $txnId. Invoking submitTransactionSignature...');
+        try {
+          await OneAuth().submitTransactionSignature(
+            txnId: txnId.toString(),
+            txnHash: txnHash.toString(),
+            pin: 'PUSH_APPROVED',
+            authType: 'PUSH',
+            userResponse: 'true',
+          );
+          debugPrint('OneAuth: Background Transaction Push Verification YES succeeded!');
+        } catch (e) {
+          debugPrint('OneAuth: Background Transaction Push Verification YES failed: $e');
+        }
+      } else if (response.actionId == 'action_no') {
+        debugPrint('OneAuth: Background NO tapped for txnId: $txnId. Invoking submitTransactionSignature...');
+        OneAuth().notifyChallengeReceived({
+          'status': 'DECLINED',
+          'txnId': txnId,
+          'messageId': messageId,
+          'userResponse': 'false',
+        });
+        try {
+          await OneAuth().submitTransactionSignature(
+            txnId: txnId.toString(),
+            txnHash: txnHash.toString(),
+            pin: 'PUSH_DECLINED',
+            authType: 'PUSH',
+            userResponse: 'false',
+          );
+          debugPrint('OneAuth: Background Transaction Push Verification NO completed.');
+        } catch (e) {
+          debugPrint('OneAuth: Background Transaction Push Verification NO failed: $e');
+        }
+      }
+    } else {
+      if (response.actionId == 'action_yes') {
+        debugPrint('OneAuth: Background YES tapped for messageId: $messageId. Invoking verifyNumberMatching...');
+        try {
+          await OneAuth().verifyNumberMatching(
+            messageId: messageId?.toString(),
+            preferredAuthenticationType: 'PUSH',
+            userResponse: 'true',
+          );
+          debugPrint('OneAuth: Background Push Verification YES succeeded!');
+        } catch (e) {
+          debugPrint('OneAuth: Background Push Verification YES failed: $e');
+        }
+      } else if (response.actionId == 'action_no') {
+        debugPrint('OneAuth: Background NO tapped for messageId: $messageId. Invoking verifyNumberMatching...');
+        OneAuth().notifyChallengeReceived({
+          'status': 'DECLINED',
+          'messageId': messageId,
+          'userResponse': 'false',
+        });
+        try {
+          await OneAuth().verifyNumberMatching(
+            messageId: messageId?.toString(),
+            preferredAuthenticationType: 'PUSH',
+            userResponse: 'false',
+          );
+          debugPrint('OneAuth: Background Push Verification NO succeeded!');
+        } catch (e) {
+          debugPrint('OneAuth: Background Push Verification NO failed: $e');
+        }
+      }
+    }
+  }
+}
+
 /// Isolated Top-Level Background Message Handler required by FCM
 @pragma('vm:entry-point')
 Future<void> _oneAuthBackgroundMessageHandler(RemoteMessage message) async {
@@ -51,16 +138,100 @@ Future<void> _oneAuthBackgroundMessageHandler(RemoteMessage message) async {
       final FlutterLocalNotificationsPlugin localNotifications = FlutterLocalNotificationsPlugin();
       const androidInitSettings = AndroidInitializationSettings('ic_one_auth_notification');
       const initSettings = InitializationSettings(android: androidInitSettings);
-      await localNotifications.initialize(initSettings);
+      await localNotifications.initialize(
+        initSettings,
+        onDidReceiveNotificationResponse: (response) async {
+          if (response.actionId == 'action_yes' || response.actionId == 'action_no') {
+            Map<String, dynamic> data = {};
+            if (response.payload != null && response.payload!.isNotEmpty) {
+              try {
+                data = jsonDecode(response.payload!) as Map<String, dynamic>;
+              } catch (_) {}
+            }
+            final messageId = data['messageId'] ?? data['message_id'] ?? data['customerUniqueKey'];
+            final txnId = data['txnId'] ?? data['txn_id'] ?? data['transactionId'];
+            final txnHash = data['txnHash'] ?? data['txn_hash'] ?? '';
+
+            if (txnId != null && txnId.toString().isNotEmpty) {
+              if (response.actionId == 'action_yes') {
+                try {
+                  await OneAuth().submitTransactionSignature(
+                    txnId: txnId.toString(),
+                    txnHash: txnHash.toString(),
+                    pin: 'PUSH_APPROVED',
+                    authType: 'PUSH',
+                    userResponse: 'true',
+                  );
+                } catch (e) {
+                  debugPrint('OneAuth: Background Transaction YES tap failed: $e');
+                }
+              } else if (response.actionId == 'action_no') {
+                OneAuth().notifyChallengeReceived({
+                  'status': 'DECLINED',
+                  'txnId': txnId,
+                  'messageId': messageId,
+                  'userResponse': 'false',
+                });
+                try {
+                  await OneAuth().submitTransactionSignature(
+                    txnId: txnId.toString(),
+                    txnHash: txnHash.toString(),
+                    pin: 'PUSH_DECLINED',
+                    authType: 'PUSH',
+                    userResponse: 'false',
+                  );
+                } catch (e) {
+                  debugPrint('OneAuth: Background Transaction NO tap failed: $e');
+                }
+              }
+            } else {
+              if (response.actionId == 'action_yes') {
+                try {
+                  await OneAuth().verifyNumberMatching(
+                    messageId: messageId?.toString(),
+                    preferredAuthenticationType: 'PUSH',
+                    userResponse: 'true',
+                  );
+                } catch (e) {
+                  debugPrint('OneAuth: Background YES tap failed: $e');
+                }
+              } else if (response.actionId == 'action_no') {
+                OneAuth().notifyChallengeReceived({
+                  'status': 'DECLINED',
+                  'messageId': messageId,
+                  'userResponse': 'false',
+                });
+                try {
+                  await OneAuth().verifyNumberMatching(
+                    messageId: messageId?.toString(),
+                    preferredAuthenticationType: 'PUSH',
+                    userResponse: 'false',
+                  );
+                } catch (e) {
+                  debugPrint('OneAuth: Background NO tap failed: $e');
+                }
+              }
+            }
+          }
+        },
+        onDidReceiveBackgroundNotificationResponse: _oneAuthBackgroundNotificationResponseHandler,
+      );
 
       final title = message.data['title'] ?? 'OneAuth Challenge';
-      final body = message.data['body'] ?? message.data['message'] ?? 'Approve transaction challenge';
+      final body = message.data['body'] ?? message.data['message'] ?? 'Approve login request?';
+      final isPushApproval = (message.data['authenticationType'] == 'PUSH' ||
+                              message.data['preferredAuthenticationType'] == 'PUSH' ||
+                              message.data['authType'] == 'PUSH' ||
+                              message.data['prompt'] == 'YES_NO' ||
+                              message.data['options'] == 'YES,NO' ||
+                              message.data.containsKey('txnId') ||
+                              message.data.containsKey('customerUniqueKey'));
 
       await localNotifications.show(
         message.hashCode,
         title,
         body,
-        const NotificationDetails(
+        NotificationDetails(
           android: AndroidNotificationDetails(
             'one_auth_high_importance_channel',
             'High Importance Notifications',
@@ -68,8 +239,25 @@ Future<void> _oneAuthBackgroundMessageHandler(RemoteMessage message) async {
             importance: Importance.max,
             priority: Priority.high,
             icon: 'ic_one_auth_notification',
+            actions: isPushApproval
+                ? <AndroidNotificationAction>[
+                    const AndroidNotificationAction(
+                      'action_yes',
+                      'YES',
+                      showsUserInterface: true,
+                      cancelNotification: true,
+                    ),
+                    const AndroidNotificationAction(
+                      'action_no',
+                      'NO',
+                      showsUserInterface: true,
+                      cancelNotification: true,
+                    ),
+                  ]
+                : null,
           ),
         ),
+        payload: jsonEncode(message.data),
       );
     } catch (e) {
       debugPrint('OneAuth SDK: Background Local Notification error: $e');
@@ -122,7 +310,97 @@ class OneAuthPushManager {
       // 3. Initialize Local Notifications Plugin & High Importance Channel
       const androidInitSettings = AndroidInitializationSettings('ic_one_auth_notification');
       const initSettings = InitializationSettings(android: androidInitSettings);
-      await _localNotifications.initialize(initSettings);
+      await _localNotifications.initialize(
+        initSettings,
+        onDidReceiveNotificationResponse: (NotificationResponse response) async {
+          debugPrint('OneAuth: Local Notification tapped: actionId=${response.actionId}, payload=${response.payload}');
+          final actionId = response.actionId?.toLowerCase() ?? '';
+          final isYes = actionId == 'action_yes' || actionId == 'yes' || actionId == 'approve';
+          final isNo = actionId == 'action_no' || actionId == 'no' || actionId == 'deny' || actionId == 'decline';
+
+          if (isYes || isNo) {
+            Map<String, dynamic> data = {};
+            if (response.payload != null && response.payload!.isNotEmpty) {
+              try {
+                data = jsonDecode(response.payload!) as Map<String, dynamic>;
+              } catch (_) {}
+            }
+            final messageId = data['messageId'] ?? data['message_id'] ?? data['customerUniqueKey'];
+            final txnId = data['txnId'] ?? data['txn_id'] ?? data['transactionId'];
+            final txnHash = data['txnHash'] ?? data['txn_hash'] ?? '';
+
+            if (txnId != null && txnId.toString().isNotEmpty) {
+              if (isYes) {
+                debugPrint('OneAuth: YES action tapped on notification for txnId: $txnId. Invoking submitTransactionSignature...');
+                try {
+                  await OneAuth().submitTransactionSignature(
+                    txnId: txnId.toString(),
+                    txnHash: txnHash.toString(),
+                    pin: 'PUSH_APPROVED',
+                    authType: 'PUSH',
+                    userResponse: 'true',
+                  );
+                  debugPrint('OneAuth: Transaction Push Verification YES completed successfully.');
+                } catch (e) {
+                  debugPrint('OneAuth: Transaction Push Verification YES failed: $e');
+                }
+              } else if (isNo) {
+                debugPrint('OneAuth: NO action tapped on notification for txnId: $txnId. Invoking submitTransactionSignature...');
+                notifyChallengeReceived({
+                  'status': 'DECLINED',
+                  'txnId': txnId,
+                  'messageId': messageId,
+                  'userResponse': 'false',
+                });
+                try {
+                  await OneAuth().submitTransactionSignature(
+                    txnId: txnId.toString(),
+                    txnHash: txnHash.toString(),
+                    pin: 'PUSH_DECLINED',
+                    authType: 'PUSH',
+                    userResponse: 'false',
+                  );
+                  debugPrint('OneAuth: Transaction Push Verification NO completed.');
+                } catch (e) {
+                  debugPrint('OneAuth: Transaction Push Verification NO failed: $e');
+                }
+              }
+            } else {
+              if (isYes) {
+                debugPrint('OneAuth: YES action tapped on notification for messageId: $messageId. Invoking verifyNumberMatching...');
+                try {
+                  await OneAuth().verifyNumberMatching(
+                    messageId: messageId?.toString(),
+                    preferredAuthenticationType: 'PUSH',
+                    userResponse: 'true',
+                  );
+                  debugPrint('OneAuth: Push Verification YES completed successfully.');
+                } catch (e) {
+                  debugPrint('OneAuth: Push Verification YES failed: $e');
+                }
+              } else if (isNo) {
+                debugPrint('OneAuth: NO action tapped on notification for messageId: $messageId. Invoking verifyNumberMatching...');
+                notifyChallengeReceived({
+                  'status': 'DECLINED',
+                  'messageId': messageId,
+                  'userResponse': 'false',
+                });
+                try {
+                  await OneAuth().verifyNumberMatching(
+                    messageId: messageId?.toString(),
+                    preferredAuthenticationType: 'PUSH',
+                    userResponse: 'false',
+                  );
+                  debugPrint('OneAuth: Push Verification NO completed successfully.');
+                } catch (e) {
+                  debugPrint('OneAuth: Push Verification NO failed: $e');
+                }
+              }
+            }
+          }
+        },
+        onDidReceiveBackgroundNotificationResponse: _oneAuthBackgroundNotificationResponseHandler,
+      );
 
       final androidPlugin = _localNotifications.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
@@ -154,7 +432,14 @@ class OneAuthPushManager {
 
         final notification = message.notification;
         final title = notification?.title ?? message.data['title'] ?? 'OneAuth Challenge';
-        final body = notification?.body ?? message.data['body'] ?? message.data['message'] ?? 'Approve transaction challenge';
+        final body = notification?.body ?? message.data['body'] ?? message.data['message'] ?? 'Approve login request?';
+        final isPushApproval = (message.data['authenticationType'] == 'PUSH' ||
+                                message.data['preferredAuthenticationType'] == 'PUSH' ||
+                                message.data['authType'] == 'PUSH' ||
+                                message.data['prompt'] == 'YES_NO' ||
+                                message.data['options'] == 'YES,NO' ||
+                                message.data.containsKey('txnId') ||
+                                message.data.containsKey('customerUniqueKey'));
 
         _localNotifications.show(
           message.hashCode,
@@ -168,8 +453,25 @@ class OneAuthPushManager {
               importance: Importance.max,
               priority: Priority.high,
               icon: 'ic_one_auth_notification',
+              actions: isPushApproval
+                  ? <AndroidNotificationAction>[
+                      const AndroidNotificationAction(
+                        'action_yes',
+                        'YES',
+                        showsUserInterface: true,
+                        cancelNotification: true,
+                      ),
+                      const AndroidNotificationAction(
+                        'action_no',
+                        'NO',
+                        showsUserInterface: true,
+                        cancelNotification: true,
+                      ),
+                    ]
+                  : null,
             ),
           ),
+          payload: jsonEncode(message.data),
         );
 
         _processPushData(message.data);
@@ -256,6 +558,12 @@ class OneAuthPushManager {
       _latestChallengeData = data;
       _challengeStreamController.add(data);
     }
+  }
+
+  void notifyChallengeReceived(Map<String, dynamic> data) {
+    debugPrint('OneAuth SDK: Emitting Notification/Verify Payload: $data');
+    _latestChallengeData = data;
+    _challengeStreamController.add(data);
   }
 
   void dispose() {

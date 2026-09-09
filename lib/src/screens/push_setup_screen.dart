@@ -10,7 +10,7 @@ enum PushSetupType { approval, matching }
 
 class OneAuthPushSetupScreen extends StatefulWidget {
   final OneAuthUser user;
-  final VoidCallback onComplete;
+  final dynamic onComplete;
   final PushSetupType type;
 
   const OneAuthPushSetupScreen({
@@ -34,6 +34,14 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
   List<int> _numberChoices = [108, 42, 85];
   StreamSubscription? _pushSubscription;
 
+  void _notifyComplete(bool success) {
+    if (widget.onComplete is Function(bool)) {
+      (widget.onComplete as Function(bool))(success);
+    } else if (widget.onComplete is Function()) {
+      (widget.onComplete as Function())();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -50,17 +58,43 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
       curve: Curves.elasticOut,
     ));
 
+    // Check if a push challenge payload was already received before screen mounted
+    final latestData = OneAuth().latestPushChallengeData;
+    if (latestData != null) {
+      _messageId = latestData['messageId'] ?? latestData['message_id'] ?? latestData['customerUniqueKey'];
+      final pushCode = latestData['numberMatchingCode'] ?? latestData['number_matching_code'];
+      if (pushCode != null) {
+        final code = int.tryParse(pushCode.toString()) ?? 108;
+        final choice2 = (code + 17) % 150 + 10;
+        final choice3 = (code + 43) % 150 + 10;
+        _numberChoices = [code, choice2, choice3]..shuffle();
+      }
+    }
+
     // Listen for incoming FCM push challenge details
     _pushSubscription = OneAuth().onPushChallengeReceived.listen((data) {
       debugPrint('OneAuth PushSetupScreen: Received Push Data: $data');
       if (mounted) {
+        final status = data['status']?.toString().toUpperCase();
+        final userResp = data['userResponse']?.toString();
+        if (status == 'VERIFIED' || status == 'SUCCESS' || status == 'APPROVED') {
+          OneAuthSnackBar.show(context, message: 'Push Approval Verified!');
+          _notifyComplete(true);
+          return;
+        } else if (status == 'DECLINED' || status == 'DENIED' || status == 'REJECTED' || status == 'FAILED' || userResp == 'false') {
+          OneAuthSnackBar.show(context, message: 'Push Approval Denied.', isError: true);
+          _notifyComplete(false);
+          return;
+        }
+
         setState(() {
           _messageId = data['messageId'] ?? data['message_id'] ?? data['customerUniqueKey'];
-          if (data['numberMatchingCode'] != null) {
-            final code = int.tryParse(data['numberMatchingCode'].toString()) ?? 108;
+          final pushCode = data['numberMatchingCode'] ?? data['number_matching_code'];
+          if (pushCode != null) {
+            final code = int.tryParse(pushCode.toString()) ?? 108;
             final choice2 = (code + 17) % 150 + 10;
             final choice3 = (code + 43) % 150 + 10;
-            _numberChoices = [code, choice2, choice3];
+            _numberChoices = [code, choice2, choice3]..shuffle();
           }
         });
       }
@@ -90,11 +124,7 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
               : 'PUSH',
         ),
       );
-      debugPrint('OneAuth: submitCsr completed automatically on load.');
-      if (mounted && widget.type == PushSetupType.approval) {
-        OneAuthSnackBar.show(context, message: 'Push Approval Activated!');
-        widget.onComplete();
-      }
+      debugPrint('OneAuth: submitCsr completed on load. Awaiting push notification approval...');
     } catch (e) {
       debugPrint('OneAuth: submitCsr failed: $e');
       if (mounted) {
@@ -119,11 +149,14 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
       await OneAuth().verifyNumberMatching(
         selectedNumber: selectedNumber.toString(),
         messageId: _messageId,
+        preferredAuthenticationType: widget.type == PushSetupType.matching
+            ? 'NUMBER_MATCHING'
+            : 'PUSH',
       );
 
       if (mounted) {
         OneAuthSnackBar.show(context, message: 'Number Matching Verified ($selectedNumber)!');
-        widget.onComplete();
+        _notifyComplete(true);
       }
     } catch (e) {
       debugPrint('OneAuth: /verify failed: $e');
@@ -175,7 +208,7 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
     final String title = isMatching ? 'Number Matching Setup' : 'Push Approval Setup';
     final String description = isMatching
         ? 'Tap the matching number below that corresponds to your notification banner to verify.'
-        : 'You will receive a notification with "Approve" or "Deny" buttons on your screen to authorize requests.';
+        : 'You will receive a notification with "Approve" or "Deny" buttons on your device. Respond to the notification to authorize.';
 
     return Scaffold(
       backgroundColor: OneAuthTheme.getBackgroundColor(context),
@@ -308,7 +341,7 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
                                     Text(
                                       isMatching
                                           ? 'Tap matching number in app'
-                                          : 'Approve login request?',
+                                          : 'Approve push request?',
                                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
                                     ),
                                   ],

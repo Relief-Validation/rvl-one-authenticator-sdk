@@ -19,6 +19,9 @@ abstract class OneAuthInterface {
   /// Stream of incoming push notification transaction challenge payloads.
   Stream<Map<String, dynamic>> get onPushChallengeReceived;
 
+  /// Emits a challenge payload to listening UI components.
+  void notifyChallengeReceived(Map<String, dynamic> data);
+
   /// Retrieves the most recent push challenge payload received by the SDK.
   Map<String, dynamic>? get latestPushChallengeData;
 
@@ -77,14 +80,17 @@ abstract class OneAuthInterface {
     required String pin,
     String? authType,
     String? selectedNumberMatchingCode,
+    String? userResponse,
   });
 
   /// Checks the enrollment status of the device.
   Future<Map<String, dynamic>> checkEnrollmentStatus();
 
-  /// Verifies selected number matching code during enrollment / setup.
+  /// Verifies selected number matching code, push, or biometric setup during enrollment.
   Future<Map<String, dynamic>> verifyNumberMatching({
-    required String selectedNumber,
+    String? selectedNumber,
     String? messageId,
+    String? preferredAuthenticationType,
+    String? userResponse,
   });
 }
