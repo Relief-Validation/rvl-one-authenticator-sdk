@@ -300,7 +300,7 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
                                             shape: BoxShape.circle,
                                           ),
                                           child: const Center(
-                                            child: Text('1', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                                            child: Icon(Icons.security, color: Colors.white, size: 12),
                                           ),
                                         ),
                                         const SizedBox(width: 8),

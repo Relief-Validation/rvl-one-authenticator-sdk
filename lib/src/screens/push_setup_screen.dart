@@ -295,7 +295,7 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
                                             shape: BoxShape.circle,
                                           ),
                                           child: const Center(
-                                            child: Text('1', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                                            child: Icon(Icons.security, color: Colors.white, size: 12),
                                           ),
                                         ),
                                         const SizedBox(width: 8),
@@ -311,17 +311,6 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
                                           : 'Approve login request?',
                                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
                                     ),
-                                    if (!isMatching) ...[
-                                      const SizedBox(height: 8),
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.end,
-                                        children: [
-                                          Text('Deny', style: TextStyle(color: Colors.red[700], fontSize: 11, fontWeight: FontWeight.bold)),
-                                          const SizedBox(width: 12),
-                                          const Text('Approve', style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold)),
-                                        ],
-                                      ),
-                                    ],
                                   ],
                                 ),
                               ),
