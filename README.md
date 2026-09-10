@@ -239,6 +239,17 @@ if (txnId != null && txnHash != null) {
         ),
       ),
     );
+  } else if (authType == 'NUMBER_MATCHING' || authType == 'PUSH') {
+    verified = await navigator.push<bool>(
+      MaterialPageRoute(
+        builder: (_) => OneAuthPushVerificationScreen(
+          txnId: txnId,
+          txnHash: txnHash,
+          authType: authType,
+          onComplete: (bool success) => navigator.pop(success),
+        ),
+      ),
+    );
   }
 
   // 3. Handle verification result

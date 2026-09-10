@@ -11,6 +11,7 @@ class OneAuthPushVerificationScreen extends StatefulWidget {
   final String txnId;
   final String txnHash;
   final String? numberMatchingCode;
+  final String? authType;
   final Function onComplete;
 
   const OneAuthPushVerificationScreen({
@@ -18,6 +19,7 @@ class OneAuthPushVerificationScreen extends StatefulWidget {
     required this.txnId,
     required this.txnHash,
     this.numberMatchingCode,
+    this.authType,
     required this.onComplete,
   });
 
@@ -137,7 +139,7 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
         txnId: widget.txnId,
         txnHash: widget.txnHash,
         pin: selectedNumber ?? _currentNumberMatchingCode ?? 'PUSH_APPROVED',
-        authType: _currentNumberMatchingCode != null ? 'NUMBER_MATCHING' : 'PUSH',
+        authType: widget.authType ?? (_currentNumberMatchingCode != null ? 'NUMBER_MATCHING' : 'PUSH'),
         selectedNumberMatchingCode: selectedNumber ?? _currentNumberMatchingCode,
       );
 
@@ -201,7 +203,8 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
 
   @override
   Widget build(BuildContext context) {
-    final bool isMatching = _currentNumberMatchingCode != null;
+    final bool isMatching = widget.authType == 'NUMBER_MATCHING' ||
+        (_currentNumberMatchingCode != null && _currentNumberMatchingCode!.isNotEmpty);
     final String title = isMatching ? 'Number Matching Verification' : 'Push Approval Verification';
     final String description = isMatching
         ? 'Select the matching number shown below that corresponds to your notification banner to authorize.'
