@@ -12,6 +12,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'one_auth_interface.dart';
+import 'core/utils.dart';
 import 'models/user.dart';
 import 'api/dio_client.dart';
 import 'core/env.dart';
@@ -232,6 +233,7 @@ class OneAuth implements OneAuthInterface {
           builder: (_) => OneAuthPinVerificationScreen(
             txnId: txnId,
             txnHash: txnHash,
+            numberMatchingCode: formatNumberMatchingCode(data['numberMatchingCode'] ?? data['number_matching_code']),
             pinLength: authType == 'TOTP' ? 6 : 4,
             onComplete: () {
               _navigatorKey?.currentState?.pop();

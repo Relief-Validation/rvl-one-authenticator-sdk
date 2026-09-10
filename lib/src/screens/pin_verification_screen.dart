@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../core/theme.dart';
@@ -35,6 +36,7 @@ class _OneAuthPinVerificationScreenState extends State<OneAuthPinVerificationScr
   late final List<FocusNode> _pinFocusNodes;
   String _currentCode = '';
   bool _showNotification = false;
+  StreamSubscription? _pushSubscription;
 
   @override
   void initState() {
@@ -47,6 +49,30 @@ class _OneAuthPinVerificationScreenState extends State<OneAuthPinVerificationScr
     );
     _pinControllers = List.generate(widget.pinLength, (_) => TextEditingController());
     _pinFocusNodes = List.generate(widget.pinLength, (_) => FocusNode());
+
+    // Check if push challenge data exists or arrives via FCM
+    final latestData = OneAuth().latestPushChallengeData;
+    if (latestData != null) {
+      final pushTxnId = latestData['txnId'];
+      if (pushTxnId == widget.txnId || widget.txnId.isEmpty) {
+        final pushCode = latestData['numberMatchingCode'] ?? latestData['number_matching_code'];
+        if (pushCode != null) {
+          _viewModel.updateNumberMatchingCode(pushCode);
+        }
+      }
+    }
+
+    _pushSubscription = OneAuth().onPushChallengeReceived.listen((data) {
+      if (mounted) {
+        final pushTxnId = data['txnId'];
+        if (pushTxnId == widget.txnId || widget.txnId.isEmpty) {
+          final pushCode = data['numberMatchingCode'] ?? data['number_matching_code'];
+          if (pushCode != null) {
+            _viewModel.updateNumberMatchingCode(pushCode);
+          }
+        }
+      }
+    });
 
     if (widget.pinLength == 6) {
       _showSimulatedPushNotification();
@@ -96,6 +122,7 @@ class _OneAuthPinVerificationScreenState extends State<OneAuthPinVerificationScr
 
   @override
   void dispose() {
+    _pushSubscription?.cancel();
     for (var controller in _pinControllers) {
       controller.dispose();
     }
@@ -138,8 +165,8 @@ class _OneAuthPinVerificationScreenState extends State<OneAuthPinVerificationScr
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              widget.numberMatchingCode != null 
-                                ? 'Confirm the code ${widget.numberMatchingCode} and enter your PIN'
+                              _viewModel.numberMatchingCode != null && _viewModel.numberMatchingCode!.isNotEmpty
+                                ? 'Confirm the code ${_viewModel.numberMatchingCode} and enter your PIN'
                                 : widget.pinLength == 6
                                     ? 'Enter your 6-digit TOTP code to authorize this transaction'
                                     : 'Enter your ${widget.pinLength}-digit PIN to authorize this transaction',

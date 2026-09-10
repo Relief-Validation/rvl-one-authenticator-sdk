@@ -4,6 +4,7 @@ import '../widgets/app_bar.dart';
 import '../models/user.dart';
 import '../one_auth_impl.dart';
 import '../core/theme.dart';
+import '../core/utils.dart';
 import '../widgets/snack_bar.dart';
 
 enum PushSetupType { approval, matching }
@@ -31,7 +32,7 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
   bool _isSubmitting = false;
   bool _isVerifying = false;
   String? _messageId;
-  List<int> _numberChoices = [108, 42, 85];
+  List<String> _numberChoices = ['108', '042', '085'];
   StreamSubscription? _pushSubscription;
 
   void _notifyComplete(bool success) {
@@ -43,6 +44,15 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
     } else {
       Function.apply(callback, [success]);
     }
+  }
+
+  void _updateNumberChoices(dynamic pushCode) {
+    final codeStr = formatNumberMatchingCode(pushCode) ?? '108';
+    final codeInt = int.tryParse(codeStr) ?? 108;
+    final targetLen = codeStr.isNotEmpty ? codeStr.length : 3;
+    final choice2 = ((codeInt + 17) % 150 + 10).toString().padLeft(targetLen, '0');
+    final choice3 = ((codeInt + 43) % 150 + 10).toString().padLeft(targetLen, '0');
+    _numberChoices = [codeStr, choice2, choice3]..shuffle();
   }
 
   @override
@@ -67,10 +77,7 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
       _messageId = latestData['messageId'] ?? latestData['message_id'] ?? latestData['customerUniqueKey'];
       final pushCode = latestData['numberMatchingCode'] ?? latestData['number_matching_code'];
       if (pushCode != null) {
-        final code = int.tryParse(pushCode.toString()) ?? 108;
-        final choice2 = (code + 17) % 150 + 10;
-        final choice3 = (code + 43) % 150 + 10;
-        _numberChoices = [code, choice2, choice3]..shuffle();
+        _updateNumberChoices(pushCode);
       }
     }
 
@@ -94,10 +101,7 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
           _messageId = data['messageId'] ?? data['message_id'] ?? data['customerUniqueKey'];
           final pushCode = data['numberMatchingCode'] ?? data['number_matching_code'];
           if (pushCode != null) {
-            final code = int.tryParse(pushCode.toString()) ?? 108;
-            final choice2 = (code + 17) % 150 + 10;
-            final choice3 = (code + 43) % 150 + 10;
-            _numberChoices = [code, choice2, choice3]..shuffle();
+            _updateNumberChoices(pushCode);
           }
         });
       }
@@ -144,13 +148,13 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
     }
   }
 
-  Future<void> _verifySelectedNumber(int selectedNumber) async {
+  Future<void> _verifySelectedNumber(String selectedNumber) async {
     if (_isVerifying) return;
     setState(() => _isVerifying = true);
 
     try {
       await OneAuth().verifyNumberMatching(
-        selectedNumber: selectedNumber.toString(),
+        selectedNumber: selectedNumber,
         messageId: _messageId,
         preferredAuthenticationType: widget.type == PushSetupType.matching
             ? 'NUMBER_MATCHING'
@@ -177,7 +181,7 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
     }
   }
 
-  Widget _buildNumberBox(int n) {
+  Widget _buildNumberBox(String n) {
     return GestureDetector(
       onTap: _isVerifying ? null : () => _verifySelectedNumber(n),
       child: Container(
@@ -193,7 +197,7 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
         ),
         child: Center(
           child: Text(
-            '$n',
+            n,
             style: const TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.bold,

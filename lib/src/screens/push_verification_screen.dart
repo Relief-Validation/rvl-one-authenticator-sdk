@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../core/theme.dart';
+import '../core/utils.dart';
 import '../widgets/app_bar.dart';
 import '../widgets/snack_bar.dart';
 import '../one_auth_impl.dart';
@@ -60,7 +61,7 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
       curve: Curves.elasticOut,
     ));
 
-    _currentNumberMatchingCode = widget.numberMatchingCode;
+    _currentNumberMatchingCode = formatNumberMatchingCode(widget.numberMatchingCode);
     if (_currentNumberMatchingCode != null && _currentNumberMatchingCode!.isNotEmpty) {
       _updateNumberChoices(_currentNumberMatchingCode!);
     } else {
@@ -70,8 +71,10 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
         if (pushTxnId == widget.txnId || widget.txnId.isEmpty) {
           final pushCode = latestData['numberMatchingCode'] ?? latestData['number_matching_code'];
           if (pushCode != null) {
-            _currentNumberMatchingCode = pushCode.toString();
-            _updateNumberChoices(_currentNumberMatchingCode!);
+            _currentNumberMatchingCode = formatNumberMatchingCode(pushCode);
+            if (_currentNumberMatchingCode != null) {
+              _updateNumberChoices(_currentNumberMatchingCode!);
+            }
           }
         }
       }
@@ -99,7 +102,7 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
           final authType = data['authenticationType'] ?? data['authType'];
 
           if (pushCode != null || authType == 'NUMBER_MATCHING') {
-            final codeStr = pushCode?.toString() ?? '42';
+            final codeStr = formatNumberMatchingCode(pushCode) ?? '042';
             setState(() {
               _currentNumberMatchingCode = codeStr;
               _updateNumberChoices(codeStr);
@@ -112,8 +115,9 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
 
   void _updateNumberChoices(String codeStr) {
     final codeInt = int.tryParse(codeStr) ?? 42;
-    final choice2 = ((codeInt + 17) % 150 + 10).toString();
-    final choice3 = ((codeInt + 43) % 150 + 10).toString();
+    final targetLen = codeStr.isNotEmpty ? codeStr.length : 3;
+    final choice2 = ((codeInt + 17) % 150 + 10).toString().padLeft(targetLen, '0');
+    final choice3 = ((codeInt + 43) % 150 + 10).toString().padLeft(targetLen, '0');
     _numberChoices = [codeStr, choice2, choice3]..shuffle();
   }
 

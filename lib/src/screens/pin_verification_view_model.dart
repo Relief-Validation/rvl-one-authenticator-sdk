@@ -1,25 +1,35 @@
 import 'package:flutter/material.dart';
 import '../one_auth_impl.dart';
 import '../core/exceptions.dart';
+import '../core/utils.dart';
 
 class OneAuthPinVerificationViewModel extends ChangeNotifier {
   final String txnId;
   final String txnHash;
-  final String? numberMatchingCode;
   final int pinLength;
 
+  String? _numberMatchingCode;
   bool _isLoading = false;
   String? _errorMessage;
 
   OneAuthPinVerificationViewModel({
     required this.txnId,
     required this.txnHash,
-    this.numberMatchingCode,
+    String? numberMatchingCode,
     required this.pinLength,
-  });
+  }) : _numberMatchingCode = formatNumberMatchingCode(numberMatchingCode);
 
+  String? get numberMatchingCode => _numberMatchingCode;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+
+  void updateNumberMatchingCode(dynamic code) {
+    final formatted = formatNumberMatchingCode(code);
+    if (formatted != null && formatted != _numberMatchingCode) {
+      _numberMatchingCode = formatted;
+      notifyListeners();
+    }
+  }
 
   void clearError() {
     if (_errorMessage != null) {
@@ -51,7 +61,7 @@ class OneAuthPinVerificationViewModel extends ChangeNotifier {
         txnHash: txnHash,
         pin: pin,
         authType: pinLength == 6 ? 'TOTP' : 'PIN',
-        selectedNumberMatchingCode: numberMatchingCode,
+        selectedNumberMatchingCode: _numberMatchingCode,
       );
       
       _isLoading = false;
