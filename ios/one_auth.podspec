@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'one_auth'
-  s.version          = '0.2.0'
+  s.version          = '0.3.0'
   s.summary          = 'Unified authentication SDK for mobile applications.'
   s.description      = <<-DESC
 Unified authentication SDK for mobile applications, supporting multi-factor authentication and secure sessions.
