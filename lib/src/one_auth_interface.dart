@@ -92,5 +92,6 @@ abstract class OneAuthInterface {
     String? messageId,
     String? preferredAuthenticationType,
     String? userResponse,
+    String? sessionToken,
   });
 }

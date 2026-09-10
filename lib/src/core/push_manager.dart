@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'secure_id_manager.dart';
@@ -19,7 +20,7 @@ const defaultOneAuthFirebaseOptions = FirebaseOptions(
 );
 
 const AndroidNotificationChannel _highImportanceChannel = AndroidNotificationChannel(
-  'one_auth_high_importance_channel',
+  'one_auth_high_importance_channel_v2',
   'High Importance Notifications',
   description: 'This channel is used for important transaction challenge notifications.',
   importance: Importance.max,
@@ -27,14 +28,16 @@ const AndroidNotificationChannel _highImportanceChannel = AndroidNotificationCha
 
 const List<AndroidNotificationAction> _pushApprovalActions = <AndroidNotificationAction>[
   AndroidNotificationAction(
-    'action_yes',
-    'YES',
+    'action_no',
+    'NO',
+    titleColor: Color(0xFFE53935), // Red text
     showsUserInterface: true,
     cancelNotification: true,
   ),
   AndroidNotificationAction(
-    'action_no',
-    'NO',
+    'action_yes',
+    'YES',
+    titleColor: Color(0xFF0F62FE), // Blue text
     showsUserInterface: true,
     cancelNotification: true,
   ),
@@ -56,13 +59,27 @@ void _logRawRemoteMessage(RemoteMessage message, String source) {
 
 /// Determines whether an incoming data payload represents a YES/NO push-approval challenge.
 bool _isPushApproval(Map<String, dynamic> data) {
-  return data['authenticationType'] == 'PUSH' ||
-      data['preferredAuthenticationType'] == 'PUSH' ||
-      data['authType'] == 'PUSH' ||
+  // 1. Number matching requests should NEVER show YES/NO action buttons on notification banner
+  if (data['authenticationType'] == 'NUMBER_MATCHING' ||
+      data['preferredAuthenticationType'] == 'NUMBER_MATCHING' ||
+      data['authType'] == 'NUMBER_MATCHING' ||
+      data.containsKey('numberMatchingCode') ||
+      data.containsKey('number_matching_code')) {
+    return false;
+  }
+
+  // 2. Return true ONLY for explicit PUSH approval challenges or YES/NO prompts
+  final authType = data['authenticationType'] ??
+      data['preferredAuthenticationType'] ??
+      data['authType'];
+
+  if (authType == 'PUSH' ||
       data['prompt'] == 'YES_NO' ||
-      data['options'] == 'YES,NO' ||
-      data.containsKey('txnId') ||
-      data.containsKey('customerUniqueKey');
+      data['options'] == 'YES,NO') {
+    return true;
+  }
+
+  return false;
 }
 
 /// Parses a notification-response payload string into a data map.
@@ -136,6 +153,8 @@ NotificationDetails _buildChallengeNotificationDetails(Map<String, dynamic> data
       importance: Importance.max,
       priority: Priority.high,
       icon: 'ic_one_auth_notification',
+      largeIcon: const DrawableResourceAndroidBitmap('ic_bank_logo'),
+      color: const Color(0xFF0D2842),
       actions: _isPushApproval(data) ? _pushApprovalActions : null,
     ),
   );

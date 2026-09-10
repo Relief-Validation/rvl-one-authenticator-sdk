@@ -10,7 +10,7 @@ class OneAuthPushVerificationScreen extends StatefulWidget {
   final String txnId;
   final String txnHash;
   final String? numberMatchingCode;
-  final dynamic onComplete;
+  final Function onComplete;
 
   const OneAuthPushVerificationScreen({
     super.key,
@@ -34,10 +34,13 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
   StreamSubscription? _pushSubscription;
 
   void _notifyComplete(bool success) {
-    if (widget.onComplete is Function(bool)) {
-      (widget.onComplete as Function(bool))(success);
-    } else if (widget.onComplete is Function()) {
-      (widget.onComplete as Function())();
+    final callback = widget.onComplete;
+    if (callback is void Function(bool)) {
+      callback(success);
+    } else if (callback is void Function()) {
+      callback();
+    } else {
+      Function.apply(callback, [success]);
     }
   }
 
@@ -334,6 +337,45 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
                                           : 'Approve transaction challenge?',
                                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
                                     ),
+                                    if (!isMatching) ...[
+                                      const SizedBox(height: 10),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.end,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey[200],
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: const Text(
+                                              'NO',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.redAccent,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: OneAuthColors.primaryBlue,
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: const Text(
+                                              'YES',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),

@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:dio_cache_interceptor/dio_cache_interceptor.dart';
+import 'package:flutter/foundation.dart';
+import 'error_interceptor.dart';
 
 class AuthInterceptor extends Interceptor {
   final String? apiKey;
@@ -24,6 +26,18 @@ class AuthInterceptor extends Interceptor {
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
     debugPrint('OneAuth Interceptor: Request to ${options.path}');
 
+    // Disable response caching for sensitive auth, enrollment, and transaction endpoints
+    if (options.path.contains('/auth/') ||
+        options.path.contains('/enrollment/') ||
+        options.path.contains('/transactions/')) {
+      options.extra.addAll(
+        CacheOptions(
+          policy: CachePolicy.noCache,
+          store: MemCacheStore(),
+        ).toExtra(),
+      );
+    }
+
     // 1. Mandatory Security Check (before anything else)
     if (onSecurityCheck != null) {
       try {
@@ -34,7 +48,7 @@ class AuthInterceptor extends Interceptor {
           DioException(
             requestOptions: options,
             error: e,
-            type: DioExceptionType.cancel, // Or custom type
+            type: DioExceptionType.cancel,
           ),
         );
       }
@@ -70,8 +84,6 @@ class AuthInterceptor extends Interceptor {
       if (options.data is Map<String, dynamic>) {
         final data = options.data as Map<String, dynamic>;
         
-        // Per requirement: "in payload, in id: user.id"
-        // We include it as 'id' and also 'authenticatorUserId' for server compatibility
         data['id'] = authenticatorUserId;
         if (!data.containsKey('authenticatorUserId')) {
           data['authenticatorUserId'] = authenticatorUserId;
@@ -113,14 +125,17 @@ class AuthInterceptor extends Interceptor {
               options.headers['Authorization'] = 'Bearer $clientToken';
             }
 
-            // Perform the retry using a dedicated Dio instance that mimics the original setup
-            // but without interceptors to avoid recursion or complex state issues.
+            // Perform the retry using a dedicated Dio instance that mimics original options & interceptors
             final retryDio = Dio(BaseOptions(
               baseUrl: options.baseUrl,
               connectTimeout: options.connectTimeout,
               receiveTimeout: options.receiveTimeout,
+              sendTimeout: options.sendTimeout,
+              headers: Map<String, dynamic>.from(options.headers),
             ));
             
+            retryDio.interceptors.add(ErrorInterceptor());
+
             final response = await retryDio.request(
               options.path,
               data: options.data,
@@ -128,6 +143,11 @@ class AuthInterceptor extends Interceptor {
               options: Options(
                 method: options.method,
                 headers: options.headers,
+                responseType: options.responseType,
+                contentType: options.contentType,
+                validateStatus: options.validateStatus,
+                receiveTimeout: options.receiveTimeout,
+                sendTimeout: options.sendTimeout,
                 extra: options.extra,
               ),
             );

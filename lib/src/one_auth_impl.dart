@@ -88,7 +88,7 @@ class OneAuth implements OneAuthInterface {
   Future<String?> getFcmToken() => _pushManager.getFcmToken();
 
   @override
-  Future<String?> getOrCreateFcmToken() => _pushManager.getOrCreateFcmToken();
+  Future<String?> getOrCreateFcmToken() => _pushManager.getFcmToken();
 
   @override
   Future<String?> getStoredFcmToken() => _pushManager.getStoredFcmToken();
@@ -128,7 +128,7 @@ class OneAuth implements OneAuthInterface {
     if (id == null || id.isEmpty) {
       if (providedId != null && providedId.isNotEmpty) {
         id = providedId;
-        
+
         _authenticatorUserId = id;
         await _secureStorage.write(key: 'authenticatorUserId', value: id);
         debugPrint('OneAuth: Created persistent ID from provided input: $id');
@@ -248,7 +248,7 @@ class OneAuth implements OneAuthInterface {
     _userToken = null;
     _sessionToken = null;
     _clientStatusController.add(false);
-    
+
     // We could potentially trigger a re-authentication of the client here
     // but usually, it's safer to let the next request trigger it or let the app handle it.
   }
@@ -279,7 +279,7 @@ class OneAuth implements OneAuthInterface {
     if (!_isFreeRASPStarted) {
       debugPrint('OneAuth: Security monitoring blocked or failed to start. Opening Settings...');
       await openAppSettings();
-      
+
       throw OneAuthSecurityException(
         'Security monitoring is required for this application. '
         'Please ensure "read the list of installed apps" (or similar device integrity permission) '
@@ -334,12 +334,12 @@ class OneAuth implements OneAuthInterface {
       // Start Talsec. This should be called only once.
       if (!_isFreeRASPStarted || force) {
         await Talsec.instance.start(config);
-        
+
         // Settle period only on first start or forced restart
         await Future.delayed(const Duration(milliseconds: 1000));
         _isFreeRASPStarted = true;
       }
-      
+
       debugPrint('OneAuth: freeRASP Security Monitoring Started/Verified.');
     } catch (e) {
       _isFreeRASPStarted = false;
@@ -446,7 +446,7 @@ class OneAuth implements OneAuthInterface {
   Future<Map<String, dynamic>> enroll(OneAuthUser user) async {
     _ensureInitialized();
     debugPrint('OneAuth: Starting Enrollment Orchestration...');
-    
+
     final integrity = await _getDeviceIntegrity();
     _validateIntegrity(integrity, 'Enrollment');
 
@@ -466,18 +466,34 @@ class OneAuth implements OneAuthInterface {
   @override
   Future<Map<String, dynamic>> submitCsr(OneAuthUser user, {String? sessionToken, String? nonceBase64}) async {
     debugPrint('OneAuth: Building and submitting CSR...');
-    
+
     final integrity = await _getDeviceIntegrity();
     _validateIntegrity(integrity, 'CSR submission');
 
-    // Use provided fresh tokens or fall back to instance variables (with a warning)
-    final effectiveSessionToken = sessionToken ?? _sessionToken;
-    final effectiveNonce = nonceBase64 ?? _nonceBase64;
+    // Use provided fresh tokens, fall back to instance variables, or fetch a fresh enrollment nonce if missing
+    String? effectiveSessionToken = sessionToken ?? _sessionToken;
+    String? effectiveNonce = nonceBase64 ?? _nonceBase64;
 
-    if (effectiveSessionToken == null || effectiveNonce == null) {
-      debugPrint('OneAuth Error: Attempting to submit CSR without a valid session.');
+    if (effectiveSessionToken == null ||
+        effectiveNonce == null ||
+        effectiveSessionToken.isEmpty ||
+        effectiveNonce.isEmpty) {
+      debugPrint('OneAuth: Session token or nonce missing. Fetching fresh enrollment nonce...');
+      final nonceData = await getEnrollmentNonce(user.id);
+      effectiveSessionToken = nonceData['sessionToken'] ??
+          nonceData['data']?['sessionToken'] ??
+          nonceData['session_token'];
+      effectiveNonce = nonceData['nonceBase64'] ??
+          nonceData['data']?['nonceBase64'] ??
+          nonceData['nonce_base64'];
+    }
+
+    if (effectiveSessionToken == null ||
+        effectiveNonce == null ||
+        effectiveSessionToken.isEmpty ||
+        effectiveNonce.isEmpty) {
       throw OneAuthSessionException(
-        'No active enrollment session found. Please call enroll() or getEnrollmentNonce() first.',
+        'No active enrollment session found. Failed to obtain fresh enrollment nonce.',
       );
     }
 
@@ -502,7 +518,7 @@ class OneAuth implements OneAuthInterface {
         osVersion = 'iOS ${iosInfo.systemVersion}';
       }
 
-      final csrResult = await _csrManager.getOrGenerateCsr(
+      final csrResult = await _csrManager.generateCsr(
         challenge: effectiveNonce,
         identity: authenticatorUserId ?? '',
         deviceUuid: deviceUuid,
@@ -559,6 +575,9 @@ class OneAuth implements OneAuthInterface {
       _nonceBase64 = null;
 
       final data = response.data is Map<String, dynamic> ? response.data : <String, dynamic>{};
+      if (effectiveSessionToken.isNotEmpty) {
+        data['sessionToken'] ??= effectiveSessionToken;
+      }
       await _secureStorage.write(key: 'device_uuid', value: deviceUuid);
 
       final authType = user.preferredAuthenticationType?.toUpperCase();
@@ -631,10 +650,10 @@ class OneAuth implements OneAuthInterface {
   Future<Map<String, dynamic>> _getDeviceIntegrity() async {
     // Device Integrity using freeRASP (Talsec)
     // Provides real-time detection of root, emulator, tampering, and hooking.
-    
+
     // Check VPN status manually if possible or rely on callback
     // For now, we rely on the freeRASP callbacks which are the most reliable.
-    
+
     return {
       "rootedOrJailbroken": _isRooted,
       "emulatorDetected": _isEmulator,
@@ -657,7 +676,7 @@ class OneAuth implements OneAuthInterface {
     if (integrity["emulatorDetected"] == true) threats.add('Emulator');
     if (integrity["appTamperDetected"] == true) threats.add('App Tampering');
     if (integrity["hookDetected"] == true) threats.add('Hooking/Instrumentation');
-    
+
     if (integrity["deviceUntrusted"] == true) {
       // In development, this is often triggered because the IDE/Debugger is attached.
       if (kDebugMode) {
@@ -674,7 +693,7 @@ class OneAuth implements OneAuthInterface {
       debugPrint('OneAuth Security Violation: $message');
       throw OneAuthSecurityException(message);
     }
-    
+
     debugPrint('OneAuth: Device Integrity Validation Passed.');
   }
 
@@ -696,7 +715,7 @@ class OneAuth implements OneAuthInterface {
     String? userResponse,
   }) async {
     _ensureInitialized();
-    
+
     // Always ensure security before signing
     await _ensureSecurity();
 
@@ -777,7 +796,7 @@ class OneAuth implements OneAuthInterface {
         data: payload,
       );
       developer.log('submitTransactionSignature response: ${response.data}', name: 'OneAuth');
-      
+
       final data = response.data;
       final responseMap = (data is Map<String, dynamic>) ? data : <String, dynamic>{};
       final statusStr = (userResponse == 'false' || (data != null && data['status'] == 'DECLINED'))
@@ -806,7 +825,7 @@ class OneAuth implements OneAuthInterface {
         errorMessage = responseData['reason'] ?? responseData['message'];
       }
       errorMessage ??= e.message;
-      
+
       debugPrint('OneAuth: Transaction signature failed: $errorMessage');
       throw OneAuthNetworkException(
         errorMessage ?? 'Transaction signature failed',
@@ -841,7 +860,7 @@ class OneAuth implements OneAuthInterface {
       return data;
     } on DioException catch (e) {
       debugPrint('OneAuth: Failed to check enrollment status: ${e.message}');
-      
+
       // If it's a 404, we can treat it as not found
       if (e.response?.statusCode == 404) {
         return {'valid': false, 'reason': 'CERTIFICATE_NOT_FOUND'};
@@ -861,10 +880,33 @@ class OneAuth implements OneAuthInterface {
     String? messageId,
     String? preferredAuthenticationType,
     String? userResponse,
+    String? sessionToken,
   }) async {
     _ensureInitialized();
+
+    final effectiveSessionToken = sessionToken ??
+        _sessionToken ??
+        _pendingEnrollmentData?['sessionToken'] ??
+        _pendingEnrollmentData?['data']?['sessionToken'] ??
+        _pendingEnrollmentData?['session_token'];
+
+    String? resolvedToken = effectiveSessionToken;
+    if (resolvedToken == null || resolvedToken.isEmpty) {
+      final pendingJson = await _secureStorage.read(key: 'pending_enrollment_data');
+      if (pendingJson != null && pendingJson.isNotEmpty) {
+        try {
+          final pendingData = jsonDecode(pendingJson) as Map<String, dynamic>;
+          resolvedToken = pendingData['sessionToken'] ??
+              pendingData['data']?['sessionToken'] ??
+              pendingData['session_token'];
+        } catch (e) {
+          debugPrint('OneAuth Warning: Failed to parse pending_enrollment_data: $e');
+        }
+      }
+    }
+
     final deviceUuid = await OneAuthSecureIdManager.getOrCreateDeviceUuid();
-    final fcmToken = await getOrCreateFcmToken();
+    final fcmToken = await getFcmToken();
 
     final authType = preferredAuthenticationType ?? 'NUMBER_MATCHING';
 
@@ -874,6 +916,10 @@ class OneAuth implements OneAuthInterface {
       "fcmToken": fcmToken,
       "preferredAuthenticationType": authType,
     };
+
+    if (resolvedToken != null && resolvedToken.isNotEmpty) {
+      payload["sessionToken"] = resolvedToken;
+    }
 
     if (selectedNumber != null && selectedNumber.isNotEmpty) {
       payload["number"] = selectedNumber;

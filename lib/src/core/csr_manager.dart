@@ -161,4 +161,17 @@ class OneAuthCsrManager {
       deviceUuid: deviceUuid,
     );
   }
+
+  Future<CsrResult> generateCsr({
+    required String challenge,
+    required String identity,
+    required String deviceUuid,
+  }) async {
+
+    return await generateAndStoreCsr(
+      challenge: challenge,
+      identity: identity,
+      deviceUuid: deviceUuid,
+    );
+  }
 }
