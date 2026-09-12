@@ -84,9 +84,11 @@ class _OneAuthBiometricSetupScreenState extends State<OneAuthBiometricSetupScree
       if (didAuthenticate && mounted) {
         setState(() => _isEnrolled = true);
         
-        await OneAuth().submitCsr(
+        final responseData = await OneAuth().submitCsr(
           widget.user.copyWith(preferredAuthenticationType: 'BIOMETRIC'),
         );
+
+        await OneAuth().persistEnrollmentResult(responseData);
         
         if (mounted) {
           widget.onComplete();

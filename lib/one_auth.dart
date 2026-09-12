@@ -16,6 +16,7 @@ export 'src/screens/totp_setup_screen.dart';
 export 'src/screens/push_setup_screen.dart';
 export 'src/screens/pin_verification_screen.dart';
 export 'src/screens/push_verification_screen.dart';
+export 'src/screens/biometric_verification_screen.dart';
 export 'src/widgets/snack_bar.dart';
 export 'src/widgets/secondary_button.dart';
 export 'src/widgets/notification_banner.dart';

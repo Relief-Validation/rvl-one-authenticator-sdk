@@ -22,6 +22,7 @@ import 'core/push_manager.dart';
 import 'core/secure_id_manager.dart';
 import 'screens/pin_verification_screen.dart';
 import 'screens/push_setup_screen.dart';
+import 'screens/biometric_verification_screen.dart';
 import 'package:freerasp/freerasp.dart';
 
 class OneAuth implements OneAuthInterface {
@@ -221,6 +222,18 @@ class OneAuth implements OneAuthInterface {
                 ? PushSetupType.matching
                 : PushSetupType.approval,
             user: OneAuthUser(id: _authenticatorUserId ?? '', name: '', email: ''),
+            onComplete: () {
+              _navigatorKey?.currentState?.pop();
+            },
+          ),
+        ),
+      );
+    } else if (authType == 'BIOMETRIC') {
+      _navigatorKey!.currentState!.push(
+        MaterialPageRoute(
+          builder: (_) => OneAuthBiometricVerificationScreen(
+            txnId: txnId,
+            txnHash: txnHash,
             onComplete: () {
               _navigatorKey?.currentState?.pop();
             },
@@ -583,7 +596,7 @@ class OneAuth implements OneAuthInterface {
       await _secureStorage.write(key: 'device_uuid', value: deviceUuid);
 
       final authType = user.preferredAuthenticationType?.toUpperCase();
-      if (authType == 'TOTP' || authType == 'PIN') {
+      if (authType == 'TOTP' || authType == 'PIN' || authType == 'BIOMETRIC') {
         await persistEnrollmentResult(data);
         debugPrint('OneAuth: CSR submitted and enrollment persisted for $authType.');
       } else {
@@ -727,8 +740,28 @@ class OneAuth implements OneAuthInterface {
     final initialIntegrity = await _getDeviceIntegrity();
     _validateIntegrity(initialIntegrity, 'Transaction signing');
 
-    final deviceUuid = await _secureStorage.read(key: 'device_uuid');
-    final certificateSerial = await _secureStorage.read(key: 'certificate_serial');
+    var deviceUuid = await _secureStorage.read(key: 'device_uuid');
+    var certificateSerial = await _secureStorage.read(key: 'certificate_serial');
+
+    if (deviceUuid == null || certificateSerial == null) {
+      if (_pendingEnrollmentData != null) {
+        await persistEnrollmentResult(_pendingEnrollmentData!);
+        deviceUuid = await _secureStorage.read(key: 'device_uuid');
+        certificateSerial = await _secureStorage.read(key: 'certificate_serial');
+      } else {
+        final pendingJson = await _secureStorage.read(key: 'pending_enrollment_data');
+        if (pendingJson != null && pendingJson.isNotEmpty) {
+          try {
+            final pendingData = jsonDecode(pendingJson) as Map<String, dynamic>;
+            await persistEnrollmentResult(pendingData);
+            deviceUuid = await _secureStorage.read(key: 'device_uuid');
+            certificateSerial = await _secureStorage.read(key: 'certificate_serial');
+          } catch (e) {
+            debugPrint('OneAuth Warning: Failed to recover pending enrollment data: $e');
+          }
+        }
+      }
+    }
 
     if (deviceUuid == null || certificateSerial == null) {
       throw OneAuthValidationException('Device not enrolled. Please enroll first.');
