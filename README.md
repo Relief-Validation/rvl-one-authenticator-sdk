@@ -239,6 +239,16 @@ if (txnId != null && txnHash != null) {
         ),
       ),
     );
+  } else if (authType == 'BIOMETRIC') {
+    verified = await navigator.push<bool>(
+      MaterialPageRoute(
+        builder: (_) => OneAuthBiometricVerificationScreen(
+          txnId: txnId,
+          txnHash: txnHash,
+          onComplete: (bool success) => navigator.pop(success),
+        ),
+      ),
+    );
   } else if (authType == 'NUMBER_MATCHING' || authType == 'PUSH') {
     verified = await navigator.push<bool>(
       MaterialPageRoute(
