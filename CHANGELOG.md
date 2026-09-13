@@ -1,3 +1,10 @@
+## 0.4.0
+
+* Added Biometric verification screen (`OneAuthBiometricVerificationScreen`).
+* Integrated biometric authentication flow into transaction signing and MFA navigation.
+* Enhanced enrollment persistence and recovery for biometric authentications.
+* Documentation updates and code improvements.
+
 ## 0.3.0
 
 * Added Push Notification authentication flow (Push setup, approval, and verification with number matching).
