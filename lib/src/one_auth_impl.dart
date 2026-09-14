@@ -524,13 +524,20 @@ class OneAuth implements OneAuthInterface {
       }
 
       String osVersion = 'Unknown';
+      String deviceName = 'Unknown';
       if (Platform.isAndroid) {
         final androidInfo = await DeviceInfoPlugin().androidInfo;
         osVersion =
             'Android ${androidInfo.version.release} / API ${androidInfo.version.sdkInt}';
+        final manufacturer = androidInfo.manufacturer;
+        final model = androidInfo.model;
+        deviceName = model.toLowerCase().startsWith(manufacturer.toLowerCase())
+            ? model
+            : '$manufacturer $model';
       } else if (Platform.isIOS) {
         final iosInfo = await DeviceInfoPlugin().iosInfo;
         osVersion = 'iOS ${iosInfo.systemVersion}';
+        deviceName = iosInfo.name.isNotEmpty ? iosInfo.name : iosInfo.model;
       }
 
       final csrResult = await _csrManager.generateCsr(
@@ -553,6 +560,7 @@ class OneAuth implements OneAuthInterface {
         "email": user.email,
         "appInstanceId": appInstanceId,
         "osVersion": osVersion,
+        "deviceName": deviceName,
         "preferredAuthenticationType": user.preferredAuthenticationType,
       };
 
