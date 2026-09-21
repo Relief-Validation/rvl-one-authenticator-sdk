@@ -71,14 +71,20 @@ dependencies:
 ## Platform Setup
 
 ### Android
-1. In `android/app/src/main/kotlin/.../MainActivity.kt`, ensure `MainActivity` extends `FlutterFragmentActivity` to support biometric authentication:
+1. Add the required permissions to `android/app/src/main/AndroidManifest.xml`:
+   ```xml
+   <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+   <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+   ```
+
+2. In `android/app/src/main/kotlin/.../MainActivity.kt`, ensure `MainActivity` extends `FlutterFragmentActivity` to support biometric authentication:
    ```kotlin
    import io.flutter.embedding.android.FlutterFragmentActivity
 
    class MainActivity: FlutterFragmentActivity()
    ```
 
-2. Ensure your `minSdkVersion` in `android/app/build.gradle` is at least `23`.
+3. Ensure your `minSdkVersion` in `android/app/build.gradle` is at least `23`.
 
 ### iOS
 Add `NSFaceIDUsageDescription` to your `ios/Runner/Info.plist`:
