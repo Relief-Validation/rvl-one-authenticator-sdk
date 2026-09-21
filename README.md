@@ -133,6 +133,8 @@ The `OneAuthSetupScreen` requires a `OneAuthUser` object as a payload. This obje
 ### Passing Data to Setup Screen
 
 ```dart
+final navigator = Navigator.of(context);
+
 final oneAuthUser = OneAuthUser(
   id: user.id,
   name: user.name,
@@ -143,15 +145,37 @@ final oneAuthUser = OneAuthUser(
   dob: '1990-01-01',
 );
 
-Navigator.push(
-  context,
+navigator.push(
   MaterialPageRoute(
     builder: (_) => OneAuthSetupScreen(
       user: oneAuthUser,
       onConfirm: () {
-        // Proceed to OneAuthStatusScreen
+        navigator.push(
+          MaterialPageRoute(
+            builder: (_) => OneAuthStatusScreen(
+              user: oneAuthUser,
+              currentStep: 1,
+              onComplete: () {
+                navigator.pushReplacement(
+                  MaterialPageRoute(
+                    builder: (_) => OneAuthVerificationModelScreen(
+                      user: oneAuthUser,
+                      onContinue: () {
+                        navigator.popUntil((route) => route.isFirst);
+                        OneAuthSnackBar.show(
+                          context,
+                          message: 'OneAuth Activated Successfully!',
+                        );
+                      },
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
       },
-      onCancel: () => Navigator.pop(context),
+      onCancel: () => navigator.pop(),
     ),
   ),
 );
