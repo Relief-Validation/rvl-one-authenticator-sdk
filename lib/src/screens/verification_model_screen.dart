@@ -11,11 +11,13 @@ import 'push_setup_screen.dart';
 
 class OneAuthVerificationModelScreen extends StatefulWidget {
   final OneAuthUser user;
+  final String? csrPem;
   final VoidCallback onContinue;
 
   const OneAuthVerificationModelScreen({
     super.key,
     required this.user,
+    this.csrPem,
     required this.onContinue,
   });
 
@@ -130,6 +132,7 @@ class _OneAuthVerificationModelScreenState extends State<OneAuthVerificationMode
                           MaterialPageRoute(
                             builder: (context) => OneAuthTotpSetupScreen(
                               user: widget.user,
+                              csrPem: widget.csrPem,
                               onComplete: widget.onContinue,
                             ),
                           ),

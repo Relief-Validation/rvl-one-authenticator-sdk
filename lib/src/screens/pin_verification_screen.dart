@@ -90,15 +90,26 @@ class _OneAuthPinVerificationScreenState extends State<OneAuthPinVerificationScr
         secret = await OneAuth().getTotpSecret(userId);
       }
 
-      if (secret == null) {
-        final csrPem = await OneAuth().getCsrPem();
-        if (csrPem != null && csrPem.isNotEmpty) {
-          secret = OneAuthTotpGenerator.generateSecretFromPublicKeyPem(csrPem);
+      if (secret == null || secret.isEmpty) {
+        if (userId != null && userId.isNotEmpty) {
+          try {
+            final nonceData = await OneAuth().getEnrollmentNonce(userId);
+            final nonceBase64 = nonceData['nonceBase64'] ??
+                nonceData['data']?['nonceBase64'] ??
+                nonceData['nonce_base64'] ??
+                nonceData['nonce'];
+            if (nonceBase64 != null && nonceBase64 is String && nonceBase64.isNotEmpty) {
+              secret = OneAuthTotpGenerator.generateSecretFromNonce(nonceBase64);
+              await OneAuth().setTotpSecret(userId, secret);
+            }
+          } catch (e) {
+            debugPrint('OneAuth: Error obtaining nonce for TOTP: $e');
+          }
         }
       }
 
       if (secret == null || secret.isEmpty) {
-        debugPrint('OneAuth: No TOTP secret or CSR PEM found to generate TOTP code.');
+        debugPrint('OneAuth: No TOTP secret found to generate TOTP code.');
         return;
       }
 

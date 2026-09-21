@@ -36,90 +36,20 @@ class OneAuthTotpGenerator {
     return _base32Encode(Uint8List.fromList(hash));
   }
 
-  /// Derives a deterministic Base32 secret from a PEM-encoded public key
-  /// string or CSR PEM string.
-  ///
-  /// Matches Java's [TotpEngine.generateSecretFromPublicKeyPem] and
-  /// [TotpEngine.generateSecretFromPublicKey] by deriving SHA-256 over the
-  /// SubjectPublicKeyInfo DER bytes.
-  static String generateSecretFromPublicKeyPem(String publicKeyPem) {
-    if (publicKeyPem.trim().isEmpty) {
-      throw ArgumentError('publicKeyPem cannot be null or blank');
+  /// Derives a Base32 TOTP secret from a base64-encoded nonce string.
+  static String generateSecretFromNonce(String nonceBase64) {
+    if (nonceBase64.trim().isEmpty) {
+      throw ArgumentError('nonceBase64 cannot be null or blank');
     }
+    final trimmed = nonceBase64.trim();
     try {
-      final stripped = publicKeyPem
-          .replaceAll('-----BEGIN PUBLIC KEY-----', '')
-          .replaceAll('-----END PUBLIC KEY-----', '')
-          .replaceAll('-----BEGIN CERTIFICATE REQUEST-----', '')
-          .replaceAll('-----END CERTIFICATE REQUEST-----', '')
-          .replaceAll(RegExp(r'\s'), '');
-      final derBytes = Uint8List.fromList(base64.decode(stripped));
-      final pkInfoBytes = _extractSubjectPublicKeyInfoFromCsr(derBytes) ?? derBytes;
-      return generateSecretFromBytes(pkInfoBytes);
+      final bytes = base64.decode(trimmed);
+      return generateSecretFromBytes(Uint8List.fromList(bytes));
     } catch (_) {
       return generateSecretFromBytes(
-        Uint8List.fromList(utf8.encode(publicKeyPem)),
+        Uint8List.fromList(utf8.encode(trimmed)),
       );
     }
-  }
-
-  /// Extracts the SubjectPublicKeyInfo DER bytes from a PKCS#10 CSR DER buffer.
-  /// Returns null if the DER buffer is not a valid PKCS#10 CSR structure.
-  static Uint8List? _extractSubjectPublicKeyInfoFromCsr(Uint8List der) {
-    try {
-      var offset = 0;
-      // 1. Outer SEQUENCE (CertificationRequest)
-      if (der[offset++] != 0x30) return null;
-      offset = _skipLength(der, offset);
-
-      // 2. Inner SEQUENCE (CertificationRequestInfo)
-      if (der[offset] != 0x30) return null;
-      offset++;
-      offset = _skipLength(der, offset);
-
-      // 3. Inside CertificationRequestInfo:
-      // Element 1: version (INTEGER 0x02)
-      if (der[offset] != 0x02) return null;
-      offset++;
-      final verLen = _readLength(der, offset);
-      offset = _skipLength(der, offset) + verLen;
-
-      // Element 2: subject (SEQUENCE 0x30)
-      if (der[offset] != 0x30) return null;
-      offset++;
-      final subjLen = _readLength(der, offset);
-      offset = _skipLength(der, offset) + subjLen;
-
-      // Element 3: subjectPKInfo (SEQUENCE 0x30)
-      if (der[offset] != 0x30) return null;
-      final pkStart = offset;
-      offset++;
-      final pkLen = _readLength(der, offset);
-      final pkHeaderLen = _skipLength(der, pkStart + 1) - pkStart;
-      final totalPkLen = pkHeaderLen + pkLen;
-
-      return der.sublist(pkStart, pkStart + totalPkLen);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  static int _readLength(Uint8List data, int offset) {
-    final b = data[offset];
-    if (b < 0x80) return b;
-    if (b == 0x81) return data[offset + 1];
-    if (b == 0x82) return (data[offset + 1] << 8) | data[offset + 2];
-    if (b == 0x83) return (data[offset + 1] << 16) | (data[offset + 2] << 8) | data[offset + 3];
-    return 0;
-  }
-
-  static int _skipLength(Uint8List data, int offset) {
-    final b = data[offset];
-    if (b < 0x80) return offset + 1;
-    if (b == 0x81) return offset + 2;
-    if (b == 0x82) return offset + 3;
-    if (b == 0x83) return offset + 4;
-    return offset + 1;
   }
 
   // ---- Code generation ----

@@ -10,11 +10,13 @@ import '../one_auth_impl.dart';
 
 class OneAuthTotpSetupScreen extends StatefulWidget {
   final OneAuthUser user;
+  final String? csrPem;
   final VoidCallback onComplete;
 
   const OneAuthTotpSetupScreen({
     super.key,
     required this.user,
+    this.csrPem,
     required this.onComplete,
   });
 
@@ -47,31 +49,42 @@ class _OneAuthTotpSetupScreenState extends State<OneAuthTotpSetupScreen> {
   }
 
   void _showSimulatedPushNotification() {
-    // Simulate a push notification arriving after a short delay
     Future.delayed(const Duration(seconds: 2), () async {
       if (!mounted) return;
 
-      // In a real application, the secret is retrieved from secure storage.
-      // It is provisioned during user enrollment (e.g., via QR code scan).
       String? secret = await OneAuth().getTotpSecret(widget.user.id);
-      
-      if (secret == null) {
-        final csrPem = await OneAuth().getCsrPem();
-        if (csrPem != null && csrPem.isNotEmpty) {
-          secret = OneAuthTotpGenerator.generateSecretFromPublicKeyPem(csrPem);
+
+      if (secret == null || secret.isEmpty) {
+        try {
+          // 1. Derivation from enrollment Nonce
+          final nonceData = await OneAuth().getEnrollmentNonce(widget.user.id);
+          final nonceBase64 = nonceData['nonceBase64'] ??
+              nonceData['data']?['nonceBase64'] ??
+              nonceData['nonce_base64'] ??
+              nonceData['nonce'];
+
+          if (nonceBase64 != null && nonceBase64 is String && nonceBase64.isNotEmpty) {
+            secret = OneAuthTotpGenerator.generateSecretFromNonce(nonceBase64);
+          }
+        } catch (e) {
+          debugPrint('OneAuth: Error fetching nonce for secret derivation: $e');
+        }
+
+        if (secret != null && secret.isNotEmpty) {
+          await OneAuth().setTotpSecret(widget.user.id, secret);
         }
       }
 
       if (secret == null || secret.isEmpty) {
-        debugPrint('OneAuth: No TOTP secret or CSR PEM found to generate TOTP code.');
+        debugPrint('OneAuth: Unable to obtain secret to generate TOTP code.');
         return;
       }
-      
+
       final code = OneAuthTotpGenerator.generateCode(secret);
 
       if (!mounted) return;
 
-      setState(() {
+      setState( () {
         _currentCode = code;
         _showNotification = true;
       });
