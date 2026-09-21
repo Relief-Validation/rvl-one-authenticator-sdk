@@ -1,3 +1,8 @@
+## 0.5.0
+
+* Added `deviceName` extraction (Android model/manufacturer and iOS device name) included in CSR submission payload.
+* Updated CSR submit documentation and navigation flow sample code.
+
 ## 0.4.0
 
 * Added Biometric verification screen (`OneAuthBiometricVerificationScreen`).
