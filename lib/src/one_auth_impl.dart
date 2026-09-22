@@ -20,6 +20,7 @@ import 'core/exceptions.dart';
 import 'core/csr_manager.dart';
 import 'core/push_manager.dart';
 import 'core/secure_id_manager.dart';
+import 'core/security_service.dart';
 import 'screens/pin_verification_screen.dart';
 import 'screens/push_setup_screen.dart';
 import 'screens/push_verification_screen.dart';
@@ -56,16 +57,7 @@ class OneAuth implements OneAuthInterface {
 
   bool _isInitialized = false;
   bool _isFreeRASPStarted = false;
-  bool _isFreeRASPListenerAttached = false;
   DateTime? _lastSecurityCheck;
-
-  // Device Integrity Flags (managed by freeRASP)
-  bool _isRooted = false;
-  bool _isEmulator = false;
-  bool _isTampered = false;
-  bool _isHooked = false;
-  bool _isDeviceUntrusted = false;
-  bool _isVpnActive = false;
 
   final StreamController<bool> _clientStatusController =
       StreamController<bool>.broadcast();
@@ -308,59 +300,27 @@ class OneAuth implements OneAuthInterface {
     }
 
     // 4. Perform the actual integrity validation using the existing listener state
-    final integrity = await _getDeviceIntegrity();
+    final integrity = await getDeviceIntegrity();
     _validateIntegrity(integrity, 'SDK Operation');
 
     _lastSecurityCheck = DateTime.now();
   }
 
   Future<void> _initFreeRASP({bool force = false}) async {
-    if (_isFreeRASPStarted && !force) return; // Already running and no force requested
+    if (_isFreeRASPStarted && !force) return;
 
     try {
       final packageInfo = await pkg.PackageInfo.fromPlatform();
       final appPackageId = packageInfo.packageName;
 
-      // Configuration for freeRASP
-      final config = TalsecConfig(
-        androidConfig: AndroidConfig(
-          packageName: appPackageId,
-          signingCertHashes: ['fDRHLiKQjSC2EYUoHfR8T0fG3hGFbc12tNbEsf2P0XM='], // for debug only
-        ),
-        iosConfig: IOSConfig(
-          bundleIds: [appPackageId],
-          teamId: 'YOUR_TEAM_ID_HERE',
-        ),
-        watcherMail: '', // unused in this version
+      await SecurityService().initialize(
+        packageName: appPackageId,
+        androidSigningHashes: [], // SecurityService auto-detects current active signing hash at runtime
+        watcherMail: 'security@dginfotech.com',
       );
 
-      // Only attach listener once to avoid duplicate callback triggers
-      if (!_isFreeRASPListenerAttached) {
-        final callback = ThreatCallback(
-          onPrivilegedAccess: () => _isRooted = true,
-          onSimulator: () => _isEmulator = true,
-          onAppIntegrity: () => _isTampered = true,
-          onHooks: () => _isHooked = true,
-          onDeviceBinding: () => _isDeviceUntrusted = true,
-          onUnofficialStore: () => _isDeviceUntrusted = true,
-          onDebug: () => _isDeviceUntrusted = true,
-          onSystemVPN: () => _isVpnActive = true,
-        );
-
-        Talsec.instance.attachListener(callback);
-        _isFreeRASPListenerAttached = true;
-      }
-
-      // Start Talsec. This should be called only once.
-      if (!_isFreeRASPStarted || force) {
-        await Talsec.instance.start(config);
-
-        // Settle period only on first start or forced restart
-        await Future.delayed(const Duration(milliseconds: 1000));
-        _isFreeRASPStarted = true;
-      }
-
-      debugPrint('OneAuth: freeRASP Security Monitoring Started/Verified.');
+      _isFreeRASPStarted = SecurityService().isInitialized;
+      debugPrint('OneAuth: freeRASP Security Monitoring Started/Verified via SecurityService.');
     } catch (e) {
       _isFreeRASPStarted = false;
       debugPrint('OneAuth: Failed to start/verify freeRASP: $e');
@@ -467,7 +427,7 @@ class OneAuth implements OneAuthInterface {
     _ensureInitialized();
     debugPrint('OneAuth: Starting Enrollment Orchestration...');
 
-    final integrity = await _getDeviceIntegrity();
+    final integrity = await getDeviceIntegrity();
     _validateIntegrity(integrity, 'Enrollment');
 
     // Step 1: Explicitly fetch a fresh nonce and session
@@ -487,7 +447,7 @@ class OneAuth implements OneAuthInterface {
   Future<Map<String, dynamic>> submitCsr(OneAuthUser user, {String? sessionToken, String? nonceBase64}) async {
     debugPrint('OneAuth: Building and submitting CSR...');
 
-    final integrity = await _getDeviceIntegrity();
+    final integrity = await getDeviceIntegrity();
     _validateIntegrity(integrity, 'CSR submission');
 
     // Use provided fresh tokens, fall back to instance variables, or fetch a fresh enrollment nonce if missing
@@ -675,21 +635,17 @@ class OneAuth implements OneAuthInterface {
     }
   }
 
-  Future<Map<String, dynamic>> _getDeviceIntegrity() async {
-    // Device Integrity using freeRASP (Talsec)
-    // Provides real-time detection of root, emulator, tampering, and hooking.
-
-    // Check VPN status manually if possible or rely on callback
-    // For now, we rely on the freeRASP callbacks which are the most reliable.
-
+  @override
+  Future<Map<String, dynamic>> getDeviceIntegrity() async {
+    final secState = SecurityService().state;
     return {
-      "rootedOrJailbroken": _isRooted,
-      "emulatorDetected": _isEmulator,
-      "appTamperDetected": _isTampered,
-      "hookDetected": _isHooked,
-      "deviceUntrusted": _isDeviceUntrusted,
-      "vpnActive": _isVpnActive,
-      "scanActive": _isFreeRASPStarted,
+      "rootedOrJailbroken": secState.isRooted,
+      "emulatorDetected": secState.isEmulator,
+      "appTamperDetected": secState.isTampered,
+      "hookDetected": secState.isHooked,
+      "deviceUntrusted": secState.isUntrusted,
+      "vpnActive": secState.isVpnActive,
+      "scanActive": SecurityService().isInitialized,
       "attestationToken": null,
     };
   }
@@ -750,7 +706,7 @@ class OneAuth implements OneAuthInterface {
     debugPrint('OneAuth: Signing and submitting transaction $txnId...');
 
     // Initial check before starting the signing process
-    final initialIntegrity = await _getDeviceIntegrity();
+    final initialIntegrity = await getDeviceIntegrity();
     _validateIntegrity(initialIntegrity, 'Transaction signing');
 
     var deviceUuid = await _secureStorage.read(key: 'device_uuid');
@@ -810,7 +766,7 @@ class OneAuth implements OneAuthInterface {
     }
 
     // Final check right before making the network request
-    final finalIntegrity = await _getDeviceIntegrity();
+    final finalIntegrity = await getDeviceIntegrity();
     _validateIntegrity(finalIntegrity, 'Transaction submission');
 
     final payload = <String, dynamic>{

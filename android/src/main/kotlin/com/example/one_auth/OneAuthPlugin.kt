@@ -1,5 +1,8 @@
 package com.example.one_auth
 
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
@@ -23,6 +26,7 @@ import java.io.OutputStream
 import java.io.StringWriter
 import java.security.KeyPairGenerator
 import java.security.KeyStore
+import java.security.MessageDigest
 import java.security.NoSuchAlgorithmException
 import java.security.PrivateKey
 import java.security.Signature
@@ -31,17 +35,31 @@ import java.security.spec.ECGenParameterSpec
 /** OneAuthPlugin */
 class OneAuthPlugin: FlutterPlugin, MethodCallHandler {
   private lateinit var channel : MethodChannel
+  private lateinit var context: Context
   private val CHANNEL_NAME = "com.example.one_auth/crypto"
   private val ANDROID_KEYSTORE = "AndroidKeyStore"
   private val KEY_ALIAS = "one_auth_key"
 
   override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
+    context = flutterPluginBinding.applicationContext
     channel = MethodChannel(flutterPluginBinding.binaryMessenger, CHANNEL_NAME)
     channel.setMethodCallHandler(this)
   }
 
   override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
     when (call.method) {
+      "getAppSigningHash" -> {
+        try {
+          val hash = getSigningCertificateHash(context)
+          if (hash != null) {
+            result.success(hash)
+          } else {
+            result.error("UNAVAILABLE", "Signing hash could not be retrieved.", null)
+          }
+        } catch (e: Exception) {
+          result.error("SIGNING_HASH_ERROR", e.message, null)
+        }
+      }
       "generateCsrAndAttestation" -> {
         val challenge = call.argument<String>("challenge") ?: "default_challenge"
         val identity = call.argument<String>("identity") ?: "OneAuth Device"
@@ -71,6 +89,35 @@ class OneAuthPlugin: FlutterPlugin, MethodCallHandler {
 
   override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
     channel.setMethodCallHandler(null)
+  }
+
+  private fun getSigningCertificateHash(context: Context): String? {
+    return try {
+      val pm = context.packageManager
+      val packageName = context.packageName
+      val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        val signingInfo = pm.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES).signingInfo
+        if (signingInfo.hasMultipleSigners()) {
+          signingInfo.apkContentsSigners
+        } else {
+          signingInfo.signingCertificateHistory
+        }
+      } else {
+        @Suppress("DEPRECATION")
+        pm.getPackageInfo(packageName, PackageManager.GET_SIGNATURES).signatures
+      }
+
+      if (signatures != null && signatures.isNotEmpty()) {
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(signatures[0].toByteArray())
+        Base64.encodeToString(digest.digest(), Base64.NO_WRAP)
+      } else {
+        null
+      }
+    } catch (e: Exception) {
+      Log.e("OneAuthPlugin", "Error getting signing certificate hash", e)
+      null
+    }
   }
 
   private fun generateCsrAndAttestation(challenge: String, identity: String, bankId: String, deviceUuid: String): Map<String, Any> {

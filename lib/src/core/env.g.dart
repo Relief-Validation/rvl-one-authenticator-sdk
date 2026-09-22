@@ -9,7 +9,7 @@ part of 'env.dart';
 // coverage:ignore-file
 // ignore_for_file: type=lint
 final class _Env {
-  static const String baseUrl = 'http://192.168.1.72:8080/api/v1';
+  static const String baseUrl = 'http://103.52.140.82:4005/api/v1';
 
   static const String firebaseApiKey =
       'AIzaSyDBwRFJA2r2mNAGvjouqrurNey4U0Rzl7o';

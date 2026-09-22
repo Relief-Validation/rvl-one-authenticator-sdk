@@ -103,6 +103,9 @@ abstract class OneAuthInterface {
     required String authType,
   });
 
+  /// Retrieves the current device security and integrity state snapshot.
+  Future<Map<String, dynamic>> getDeviceIntegrity();
+
   /// Launches the multi-step enrollment setup UI flow for a user.
   Future<void> startEnrollmentFlow(
     BuildContext context, {
