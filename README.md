@@ -47,7 +47,7 @@ dependencies:
   one_auth:
     git:
       url: https://github.com/Relief-Validation/rvl-one-authenticator-sdk.git
-      ref: v0.5.0
+      ref: v0.6.0
 ```
 
 ### Via Git Repository (SSH)
@@ -56,7 +56,7 @@ dependencies:
   one_auth:
     git:
       url: git@github.com:Relief-Validation/rvl-one-authenticator-sdk.git
-      ref: v0.5.0
+      ref: v0.6.0
 ```
 
 ### Local Path (Monorepo)
@@ -255,7 +255,13 @@ final response = await dio.post('/your-endpoint', data: {
 
 ## Security Features
 
-- **Runtime Threat Detection**: Integrates **freeRASP** to detect root/jailbreak, debuggers, emulators, and dynamic instrumentation hooks (Frida).
+- **Runtime Threat Detection**: Integrates **freeRASP** and native Android checks to detect root/jailbreak, debuggers, emulators, active VPNs, and dynamic instrumentation hooks (Frida).
+- **Real-Time Threat Monitoring (`SecurityService`)**: Listen to live security alerts and handle threats reactively in your UI:
+  ```dart
+  SecurityService().threatStream.listen((threatEvent) {
+    print('Security Threat: ${threatEvent.title} - ${threatEvent.description}');
+  });
+  ```
 - **Environment Obfuscation**: Secure secrets and base URLs are compiled and obfuscated via **Envied**.
 - **Exception Handling**: Typed security exceptions (`OneAuthSecurityException`, `OneAuthCryptoException`) allow fine-grained error handling.
 

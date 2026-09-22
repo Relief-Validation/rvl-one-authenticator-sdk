@@ -1,3 +1,10 @@
+## 0.6.0
+
+* Added `SecurityService` with real-time threat monitoring stream (`threatStream`), detecting root/jailbreak, emulators, debuggers, hooking frameworks (Frida), and active VPN connections.
+* Added native Android threat detection and security alert handling via `OneAuthPlugin`.
+* Integrated end-to-end MFA Enrollment Flow (`startEnrollmentFlow`) and Transaction Signing & Verification (`verifyTransaction`) into SDK orchestration.
+* Enhanced TOTP setup flow, responsive PIN verification, and Push approval UI components.
+
 ## 0.5.0
 
 * Added `deviceName` extraction (Android model/manufacturer and iOS device name) included in CSR submission payload.
