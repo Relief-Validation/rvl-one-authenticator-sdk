@@ -136,11 +136,9 @@ The `OneAuthSetupScreen` requires a `OneAuthUser` object as a payload. This obje
 | `pin` | `String?` | PIN code or TOTP verification code. |
 | `preferredAuthenticationType` | `String?` | Set during enrollment (e.g. `'PIN'`, `'BIOMETRIC'`, `'TOTP'`, `'PUSH'`, `'NUMBER_MATCHING'`). |
 
-### Passing Data to Setup Screen
+### Launching MFA Enrollment Flow
 
 ```dart
-final navigator = Navigator.of(context);
-
 final oneAuthUser = OneAuthUser(
   id: user.id,
   name: user.name,
@@ -151,39 +149,9 @@ final oneAuthUser = OneAuthUser(
   dob: '1990-01-01',
 );
 
-navigator.push(
-  MaterialPageRoute(
-    builder: (_) => OneAuthSetupScreen(
-      user: oneAuthUser,
-      onConfirm: () {
-        navigator.push(
-          MaterialPageRoute(
-            builder: (_) => OneAuthStatusScreen(
-              user: oneAuthUser,
-              currentStep: 1,
-              onComplete: () {
-                navigator.pushReplacement(
-                  MaterialPageRoute(
-                    builder: (_) => OneAuthVerificationModelScreen(
-                      user: oneAuthUser,
-                      onContinue: () {
-                        navigator.popUntil((route) => route.isFirst);
-                        OneAuthSnackBar.show(
-                          context,
-                          message: 'OneAuth Activated Successfully!',
-                        );
-                      },
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        );
-      },
-      onCancel: () => navigator.pop(),
-    ),
-  ),
+await OneAuth().startEnrollmentFlow(
+  context,
+  user: oneAuthUser,
 );
 ```
 
@@ -246,51 +214,12 @@ if (txnId != null && txnHash != null) {
   await OneAuth().initialize(clientSecret: 'YOUR_CLIENT_SECRET');
 
   // 2. Launch SDK Verification Screen based on authType
-  bool? verified;
-  if (authType == 'PIN') {
-    verified = await navigator.push<bool>(
-      MaterialPageRoute(
-        builder: (_) => OneAuthPinVerificationScreen(
-          txnId: txnId,
-          txnHash: txnHash,
-          pinLength: 4,
-          onComplete: () => navigator.pop(true),
-        ),
-      ),
-    );
-  } else if (authType == 'TOTP') {
-    verified = await navigator.push<bool>(
-      MaterialPageRoute(
-        builder: (_) => OneAuthPinVerificationScreen(
-          txnId: txnId,
-          txnHash: txnHash,
-          pinLength: 6,
-          onComplete: () => navigator.pop(true),
-        ),
-      ),
-    );
-  } else if (authType == 'BIOMETRIC') {
-    verified = await navigator.push<bool>(
-      MaterialPageRoute(
-        builder: (_) => OneAuthBiometricVerificationScreen(
-          txnId: txnId,
-          txnHash: txnHash,
-          onComplete: (bool success) => navigator.pop(success),
-        ),
-      ),
-    );
-  } else if (authType == 'NUMBER_MATCHING' || authType == 'PUSH') {
-    verified = await navigator.push<bool>(
-      MaterialPageRoute(
-        builder: (_) => OneAuthPushVerificationScreen(
-          txnId: txnId,
-          txnHash: txnHash,
-          authType: authType,
-          onComplete: (bool success) => navigator.pop(success),
-        ),
-      ),
-    );
-  }
+  final bool? verified = await OneAuth().verifyTransaction(
+    context,
+    txnId: txnId,
+    txnHash: txnHash,
+    authType: authType,
+  );
 
   // 3. Handle verification result
   if (verified != true) {
@@ -301,6 +230,7 @@ if (txnId != null && txnHash != null) {
   // 4. Submit transaction to banking backend
   await apiService.executeTransfer(...);
 }
+```
 ```
 
 3. **Hardware Signing**: The SDK uses the Secure Enclave / TEE to sign `txnHash` with the private key.

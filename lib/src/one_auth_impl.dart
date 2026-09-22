@@ -22,7 +22,12 @@ import 'core/push_manager.dart';
 import 'core/secure_id_manager.dart';
 import 'screens/pin_verification_screen.dart';
 import 'screens/push_setup_screen.dart';
+import 'screens/push_verification_screen.dart';
 import 'screens/biometric_verification_screen.dart';
+import 'screens/setup_screen.dart';
+import 'screens/status_screen.dart';
+import 'screens/verification_model_screen.dart';
+import 'widgets/snack_bar.dart';
 import 'package:freerasp/freerasp.dart';
 
 class OneAuth implements OneAuthInterface {
@@ -1029,5 +1034,99 @@ class OneAuth implements OneAuthInterface {
         originalError: e,
       );
     }
+  }
+
+  @override
+  Future<bool?> verifyTransaction(
+    BuildContext context, {
+    required String txnId,
+    required String txnHash,
+    required String authType,
+  }) async {
+    final navigator = Navigator.of(context);
+
+    if (authType == 'PIN' || authType == 'TOTP') {
+      return navigator.push<bool>(
+        MaterialPageRoute(
+          builder: (_) => OneAuthPinVerificationScreen(
+            txnId: txnId,
+            txnHash: txnHash,
+            pinLength: authType == 'TOTP' ? 6 : 4,
+            onComplete: () => navigator.pop(true),
+          ),
+        ),
+      );
+    } else if (authType == 'NUMBER_MATCHING' || authType == 'PUSH') {
+      return navigator.push<bool>(
+        MaterialPageRoute(
+          builder: (_) => OneAuthPushVerificationScreen(
+            txnId: txnId,
+            txnHash: txnHash,
+            authType: authType,
+            onComplete: (bool success) => navigator.pop(success),
+          ),
+        ),
+      );
+    } else if (authType == 'BIOMETRIC') {
+      return navigator.push<bool>(
+        MaterialPageRoute(
+          builder: (_) => OneAuthBiometricVerificationScreen(
+            txnId: txnId,
+            txnHash: txnHash,
+            onComplete: (bool success) => navigator.pop(success),
+          ),
+        ),
+      );
+    }
+
+    return false;
+  }
+
+  @override
+  Future<void> startEnrollmentFlow(
+    BuildContext context, {
+    required OneAuthUser user,
+    VoidCallback? onSuccess,
+  }) async {
+    final navigator = Navigator.of(context);
+
+    await navigator.push(
+      MaterialPageRoute(
+        builder: (_) => OneAuthSetupScreen(
+          user: user,
+          onConfirm: () {
+            navigator.push(
+              MaterialPageRoute(
+                builder: (_) => OneAuthStatusScreen(
+                  user: user,
+                  currentStep: 1,
+                  onComplete: () {
+                    navigator.pushReplacement(
+                      MaterialPageRoute(
+                        builder: (_) => OneAuthVerificationModelScreen(
+                          user: user,
+                          onContinue: () {
+                            navigator.popUntil((route) => route.isFirst);
+                            if (onSuccess != null) {
+                              onSuccess();
+                            } else if (context.mounted) {
+                              OneAuthSnackBar.show(
+                                context,
+                                message: 'OneAuth Activated Successfully!',
+                              );
+                            }
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            );
+          },
+          onCancel: () => navigator.pop(),
+        ),
+      ),
+    );
   }
 }

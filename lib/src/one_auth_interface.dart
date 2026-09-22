@@ -94,4 +94,19 @@ abstract class OneAuthInterface {
     String? userResponse,
     String? sessionToken,
   });
+
+  /// Launches the appropriate verification screen for a given authentication type.
+  Future<bool?> verifyTransaction(
+    BuildContext context, {
+    required String txnId,
+    required String txnHash,
+    required String authType,
+  });
+
+  /// Launches the multi-step enrollment setup UI flow for a user.
+  Future<void> startEnrollmentFlow(
+    BuildContext context, {
+    required OneAuthUser user,
+    VoidCallback? onSuccess,
+  });
 }
