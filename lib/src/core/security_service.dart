@@ -189,6 +189,12 @@ class SecurityService with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Emits a simulated threat event for testing real-time stream listeners.
+  @visibleForTesting
+  void emitThreatForTesting(String type, String message) {
+    _handleThreat(type, message);
+  }
+
   /// Evaluates security and returns snapshot.
   Future<DeviceSecurityState> verifySecurity() async {
     return _state;

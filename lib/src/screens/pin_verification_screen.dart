@@ -7,6 +7,7 @@ import '../widgets/app_bar.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/pin_input.dart';
 import '../widgets/notification_banner.dart';
+import '../widgets/snack_bar.dart';
 import '../one_auth_impl.dart';
 import 'pin_verification_view_model.dart';
 
@@ -79,55 +80,67 @@ class _OneAuthPinVerificationScreenState extends State<OneAuthPinVerificationScr
     }
   }
 
+  void _notifyComplete() {
+    try {
+      widget.onComplete();
+    } catch (e) {
+      debugPrint('OneAuth PinVerification: Error executing onComplete callback: $e');
+    }
+  }
+
   void _showSimulatedPushNotification() {
     Future.delayed(const Duration(seconds: 2), () async {
       if (!mounted) return;
 
-      const storage = FlutterSecureStorage();
-      final userId = await storage.read(key: 'authenticatorUserId');
-      String? secret;
-      if (userId != null && userId.isNotEmpty) {
-        secret = await OneAuth().getTotpSecret(userId);
-      }
-
-      if (secret == null || secret.isEmpty) {
+      try {
+        const storage = FlutterSecureStorage();
+        final userId = await storage.read(key: 'authenticatorUserId');
+        String? secret;
         if (userId != null && userId.isNotEmpty) {
-          try {
-            final nonceData = await OneAuth().getEnrollmentNonce(userId);
-            final nonceBase64 = nonceData['nonceBase64'] ??
-                nonceData['data']?['nonceBase64'] ??
-                nonceData['nonce_base64'] ??
-                nonceData['nonce'];
-            if (nonceBase64 != null && nonceBase64 is String && nonceBase64.isNotEmpty) {
-              secret = OneAuthTotpGenerator.generateSecretFromNonce(nonceBase64);
-              await OneAuth().setTotpSecret(userId, secret);
+          secret = await OneAuth().getTotpSecret(userId);
+        }
+
+        if (secret == null || secret.isEmpty) {
+          if (userId != null && userId.isNotEmpty) {
+            try {
+              final nonceData = await OneAuth().getEnrollmentNonce(userId);
+              final nonceBase64 = nonceData['nonceBase64'] ??
+                  nonceData['data']?['nonceBase64'] ??
+                  nonceData['nonce_base64'] ??
+                  nonceData['nonce'];
+              if (nonceBase64 != null && nonceBase64 is String && nonceBase64.isNotEmpty) {
+                secret = OneAuthTotpGenerator.generateSecretFromNonce(nonceBase64);
+                await OneAuth().setTotpSecret(userId, secret);
+              }
+            } catch (e) {
+              debugPrint('OneAuth: Error obtaining nonce for TOTP: $e');
             }
-          } catch (e) {
-            debugPrint('OneAuth: Error obtaining nonce for TOTP: $e');
           }
         }
-      }
 
-      if (secret == null || secret.isEmpty) {
-        debugPrint('OneAuth: No TOTP secret found to generate TOTP code.');
-        return;
-      }
-
-      final code = OneAuthTotpGenerator.generateCode(secret);
-
-      if (!mounted) return;
-
-      setState(() {
-        _currentCode = code;
-        _showNotification = true;
-      });
-
-      // Auto-hide after 30 seconds
-      Future.delayed(const Duration(seconds: 30), () {
-        if (mounted && _showNotification) {
-          setState(() => _showNotification = false);
+        if (secret == null || secret.isEmpty) {
+          debugPrint('OneAuth: No TOTP secret found to generate TOTP code.');
+          return;
         }
-      });
+
+        final code = OneAuthTotpGenerator.generateCode(secret);
+
+        if (!mounted) return;
+
+        setState(() {
+          _currentCode = code;
+          _showNotification = true;
+        });
+
+        // Auto-hide after 30 seconds
+        Future.delayed(const Duration(seconds: 30), () {
+          if (mounted && _showNotification) {
+            setState(() => _showNotification = false);
+          }
+        });
+      } catch (e) {
+        debugPrint('OneAuth PinVerification: Error in simulated push notification: $e');
+      }
     });
   }
 
@@ -144,10 +157,28 @@ class _OneAuthPinVerificationScreenState extends State<OneAuthPinVerificationScr
   }
 
   Future<void> _handleVerify() async {
-    final pin = _pinControllers.map((c) => c.text).join();
-    final success = await _viewModel.verifyPin(pin);
-    if (success && mounted) {
-      widget.onComplete();
+    try {
+      final pin = _pinControllers.map((c) => c.text).join();
+      final success = await _viewModel.verifyPin(pin);
+      if (success && mounted) {
+        OneAuthSnackBar.show(context, message: 'Transaction Authorized Successfully!');
+        _notifyComplete();
+      } else if (!success && mounted && _viewModel.errorMessage != null) {
+        OneAuthSnackBar.show(
+          context,
+          message: _viewModel.errorMessage!,
+          isError: true,
+        );
+      }
+    } catch (e) {
+      debugPrint('OneAuth PinVerification: Exception in _handleVerify: $e');
+      if (mounted) {
+        OneAuthSnackBar.show(
+          context,
+          message: 'Authorization Failed: $e',
+          isError: true,
+        );
+      }
     }
   }
 

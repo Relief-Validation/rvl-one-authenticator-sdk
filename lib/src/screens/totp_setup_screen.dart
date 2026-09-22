@@ -5,6 +5,7 @@ import '../core/totp_generator.dart';
 import '../widgets/app_bar.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/notification_banner.dart';
+import '../widgets/snack_bar.dart';
 import '../models/user.dart';
 import '../one_auth_impl.dart';
 
@@ -30,6 +31,7 @@ class _OneAuthTotpSetupScreenState extends State<OneAuthTotpSetupScreen> {
   String? _errorMessage;
   String _currentCode = '';
   bool _showNotification = false;
+  bool _isVerifying = false;
 
   @override
   void initState() {
@@ -48,53 +50,65 @@ class _OneAuthTotpSetupScreenState extends State<OneAuthTotpSetupScreen> {
     super.dispose();
   }
 
+  void _notifyComplete() {
+    try {
+      widget.onComplete();
+    } catch (e) {
+      debugPrint('OneAuth TOTP: Error executing onComplete callback: $e');
+    }
+  }
+
   void _showSimulatedPushNotification() {
     Future.delayed(const Duration(seconds: 2), () async {
       if (!mounted) return;
 
-      String? secret = await OneAuth().getTotpSecret(widget.user.id);
+      try {
+        String? secret = await OneAuth().getTotpSecret(widget.user.id);
 
-      if (secret == null || secret.isEmpty) {
-        try {
-          // 1. Derivation from enrollment Nonce
-          final nonceData = await OneAuth().getEnrollmentNonce(widget.user.id);
-          final nonceBase64 = nonceData['nonceBase64'] ??
-              nonceData['data']?['nonceBase64'] ??
-              nonceData['nonce_base64'] ??
-              nonceData['nonce'];
+        if (secret == null || secret.isEmpty) {
+          try {
+            // 1. Derivation from enrollment Nonce
+            final nonceData = await OneAuth().getEnrollmentNonce(widget.user.id);
+            final nonceBase64 = nonceData['nonceBase64'] ??
+                nonceData['data']?['nonceBase64'] ??
+                nonceData['nonce_base64'] ??
+                nonceData['nonce'];
 
-          if (nonceBase64 != null && nonceBase64 is String && nonceBase64.isNotEmpty) {
-            secret = OneAuthTotpGenerator.generateSecretFromNonce(nonceBase64);
+            if (nonceBase64 != null && nonceBase64 is String && nonceBase64.isNotEmpty) {
+              secret = OneAuthTotpGenerator.generateSecretFromNonce(nonceBase64);
+            }
+          } catch (e) {
+            debugPrint('OneAuth: Error fetching nonce for secret derivation: $e');
           }
-        } catch (e) {
-          debugPrint('OneAuth: Error fetching nonce for secret derivation: $e');
+
+          if (secret != null && secret.isNotEmpty) {
+            await OneAuth().setTotpSecret(widget.user.id, secret);
+          }
         }
 
-        if (secret != null && secret.isNotEmpty) {
-          await OneAuth().setTotpSecret(widget.user.id, secret);
+        if (secret == null || secret.isEmpty) {
+          debugPrint('OneAuth: Unable to obtain secret to generate TOTP code.');
+          return;
         }
+
+        final code = OneAuthTotpGenerator.generateCode(secret);
+
+        if (!mounted) return;
+
+        setState(() {
+          _currentCode = code;
+          _showNotification = true;
+        });
+
+        // Auto-hide after 30 seconds
+        Future.delayed(const Duration(seconds: 30), () {
+          if (mounted && _showNotification) {
+            setState(() => _showNotification = false);
+          }
+        });
+      } catch (e) {
+        debugPrint('OneAuth: Exception in TOTP notification simulation: $e');
       }
-
-      if (secret == null || secret.isEmpty) {
-        debugPrint('OneAuth: Unable to obtain secret to generate TOTP code.');
-        return;
-      }
-
-      final code = OneAuthTotpGenerator.generateCode(secret);
-
-      if (!mounted) return;
-
-      setState( () {
-        _currentCode = code;
-        _showNotification = true;
-      });
-
-      // Auto-hide after 30 seconds
-      Future.delayed(const Duration(seconds: 30), () {
-        if (mounted && _showNotification) {
-          setState(() => _showNotification = false);
-        }
-      });
     });
   }
 
@@ -125,11 +139,18 @@ class _OneAuthTotpSetupScreenState extends State<OneAuthTotpSetupScreen> {
   }
 
   Future<void> _handleVerify() async {
+    if (_isVerifying) return;
+
     final code = _controllers.map((c) => c.text).join();
     if (code.length < 6) {
       setState(() => _errorMessage = 'Please enter the 6-digit code');
       return;
     }
+
+    setState(() {
+      _isVerifying = true;
+      _errorMessage = null;
+    });
 
     try {
       await OneAuth().submitCsr(
@@ -138,9 +159,28 @@ class _OneAuthTotpSetupScreenState extends State<OneAuthTotpSetupScreen> {
           totpCode: code,
         ),
       );
-      widget.onComplete();
+
+      if (mounted) {
+        OneAuthSnackBar.show(
+          context,
+          message: 'TOTP Verification Successful!',
+        );
+        _notifyComplete();
+      }
     } catch (e) {
-      setState(() => _errorMessage = 'Verification Failed: $e');
+      debugPrint('OneAuth: TOTP verification failed: $e');
+      if (mounted) {
+        setState(() => _errorMessage = 'Verification Failed: $e');
+        OneAuthSnackBar.show(
+          context,
+          message: 'Verification Failed: $e',
+          isError: true,
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isVerifying = false);
+      }
     }
   }
 
@@ -227,8 +267,8 @@ class _OneAuthTotpSetupScreenState extends State<OneAuthTotpSetupScreen> {
                 Padding(
                   padding: const EdgeInsets.all(24.0),
                   child: OneAuthPrimaryButton(
-                    label: 'Verify and Activate',
-                    onPressed: _handleVerify,
+                    label: _isVerifying ? 'Verifying...' : 'Verify and Activate',
+                    onPressed: _isVerifying ? null : _handleVerify,
                   ),
                 ),
               ],

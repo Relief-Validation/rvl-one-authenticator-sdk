@@ -23,6 +23,12 @@ class OneAuthStatusViewModel extends ChangeNotifier {
       _errorMessage = null;
       _isAlreadyValid = false;
 
+      // Ensure device passes security check before enrolling
+      if (!SecurityService().isSecure) {
+        final threatMsg = SecurityService().latestThreat?.message ?? 'Insecure device environment detected.';
+        throw OneAuthSecurityException('Security Check Failed: $threatMsg');
+      }
+
       // Preliminary check: Is the device already enrolled and valid?
       final status = await OneAuth().checkEnrollmentStatus();
       if (status['valid'] == true) {
@@ -34,7 +40,6 @@ class OneAuthStatusViewModel extends ChangeNotifier {
       }
 
       // If we are here, either it's not enrolled or not valid (e.g. revoked, not found)
-      // For some reasons, we might want to throw an error instead of proceeding
       final reason = status['reason'];
       if (reason == 'ACCOUNT_LOCKED') {
         throw OneAuthException('Your account is locked. Please contact support.');

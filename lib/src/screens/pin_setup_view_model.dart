@@ -23,19 +23,19 @@ class OneAuthPinSetupViewModel extends ChangeNotifier {
   }
 
   Future<bool> setupPin(String pin, String confirmPin) async {
-    if (pin.length < pinLength || confirmPin.length < pinLength) {
-      _errorMessage = 'Please enter a $pinLength-digit PIN in both sections.';
-      notifyListeners();
-      return false;
-    }
-
-    if (pin != confirmPin) {
-      _errorMessage = 'PINs do not match. Please try again.';
-      notifyListeners();
-      return false;
-    }
-
     try {
+      if (pin.length < pinLength || confirmPin.length < pinLength) {
+        _errorMessage = 'Please enter a $pinLength-digit PIN in both sections.';
+        notifyListeners();
+        return false;
+      }
+
+      if (pin != confirmPin) {
+        _errorMessage = 'PINs do not match. Please try again.';
+        notifyListeners();
+        return false;
+      }
+
       _isLoading = true;
       _errorMessage = null;
       notifyListeners();
@@ -50,11 +50,13 @@ class OneAuthPinSetupViewModel extends ChangeNotifier {
       notifyListeners();
       return true;
     } on OneAuthException catch (e) {
+      debugPrint('OneAuth Exception during PIN setup: $e');
       _errorMessage = e.message;
       _isLoading = false;
       notifyListeners();
       return false;
     } catch (e) {
+      debugPrint('Unexpected error during PIN setup: $e');
       _errorMessage = 'An unexpected error occurred: $e';
       _isLoading = false;
       notifyListeners();

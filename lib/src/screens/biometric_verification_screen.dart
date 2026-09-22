@@ -85,13 +85,17 @@ class _OneAuthBiometricVerificationScreenState
   }
 
   void _notifyComplete(bool success) {
-    final callback = widget.onComplete;
-    if (callback is void Function(bool)) {
-      callback(success);
-    } else if (callback is void Function()) {
-      callback();
-    } else {
-      Function.apply(callback, [success]);
+    try {
+      final callback = widget.onComplete;
+      if (callback is void Function(bool)) {
+        callback(success);
+      } else if (callback is void Function()) {
+        callback();
+      } else {
+        Function.apply(callback, [success]);
+      }
+    } catch (e) {
+      debugPrint('OneAuth Biometric: Error executing onComplete callback: $e');
     }
   }
 
@@ -197,7 +201,7 @@ class _OneAuthBiometricVerificationScreenState
       if (mounted) {
         OneAuthSnackBar.show(
           context,
-          message: 'Biometric authentication failed: ${e.toString()}',
+          message: 'Biometric authentication failed: $e',
           isError: true,
         );
       }

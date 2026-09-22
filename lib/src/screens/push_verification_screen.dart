@@ -37,13 +37,17 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
   StreamSubscription? _pushSubscription;
 
   void _notifyComplete(bool success) {
-    final callback = widget.onComplete;
-    if (callback is void Function(bool)) {
-      callback(success);
-    } else if (callback is void Function()) {
-      callback();
-    } else {
-      Function.apply(callback, [success]);
+    try {
+      final callback = widget.onComplete;
+      if (callback is void Function(bool)) {
+        callback(success);
+      } else if (callback is void Function()) {
+        callback();
+      } else {
+        Function.apply(callback, [success]);
+      }
+    } catch (e) {
+      debugPrint('OneAuth PushVerification: Error executing onComplete callback: $e');
     }
   }
 
@@ -63,64 +67,76 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
       curve: Curves.elasticOut,
     ));
 
-    _currentNumberMatchingCode = formatNumberMatchingCode(widget.numberMatchingCode);
-    if (_currentNumberMatchingCode != null && _currentNumberMatchingCode!.isNotEmpty) {
-      _updateNumberChoices(_currentNumberMatchingCode!);
-    } else {
-      final latestData = OneAuth().latestPushChallengeData;
-      if (latestData != null) {
-        final pushTxnId = latestData['txnId'];
-        if (pushTxnId == widget.txnId || widget.txnId.isEmpty) {
-          final pushCode = latestData['numberMatchingCode'] ?? latestData['number_matching_code'];
-          if (pushCode != null) {
-            _currentNumberMatchingCode = formatNumberMatchingCode(pushCode);
-            if (_currentNumberMatchingCode != null) {
-              _updateNumberChoices(_currentNumberMatchingCode!);
+    try {
+      _currentNumberMatchingCode = formatNumberMatchingCode(widget.numberMatchingCode);
+      if (_currentNumberMatchingCode != null && _currentNumberMatchingCode!.isNotEmpty) {
+        _updateNumberChoices(_currentNumberMatchingCode!);
+      } else {
+        final latestData = OneAuth().latestPushChallengeData;
+        if (latestData != null) {
+          final pushTxnId = latestData['txnId'];
+          if (pushTxnId == widget.txnId || widget.txnId.isEmpty) {
+            final pushCode = latestData['numberMatchingCode'] ?? latestData['number_matching_code'];
+            if (pushCode != null) {
+              _currentNumberMatchingCode = formatNumberMatchingCode(pushCode);
+              if (_currentNumberMatchingCode != null) {
+                _updateNumberChoices(_currentNumberMatchingCode!);
+              }
             }
           }
         }
       }
+    } catch (e) {
+      debugPrint('OneAuth PushVerification: Error initializing number matching choices: $e');
     }
 
     // Listen to FCM push challenge stream when incoming notification payload arrives
     _pushSubscription = OneAuth().onPushChallengeReceived.listen((data) {
       debugPrint('OneAuth PushVerificationScreen: Received FCM Challenge Data: $data');
       if (mounted) {
-        final status = data['status']?.toString().toUpperCase();
-        final userResp = data['userResponse']?.toString();
-        if (status == 'VERIFIED' || status == 'SUCCESS' || status == 'APPROVED') {
-          OneAuthSnackBar.show(context, message: 'Push Verification Approved!');
-          _notifyComplete(true);
-          return;
-        } else if (status == 'DECLINED' || status == 'DENIED' || status == 'REJECTED' || status == 'FAILED' || userResp == 'false') {
-          OneAuthSnackBar.show(context, message: 'Push Verification Denied.', isError: true);
-          _notifyComplete(false);
-          return;
-        }
-
-        final pushTxnId = data['txnId'];
-        if (pushTxnId == widget.txnId || widget.txnId.isEmpty) {
-          final pushCode = data['numberMatchingCode'] ?? data['number_matching_code'];
-          final authType = data['authenticationType'] ?? data['authType'];
-
-          if (pushCode != null || authType == 'NUMBER_MATCHING') {
-            final codeStr = formatNumberMatchingCode(pushCode) ?? '042';
-            setState(() {
-              _currentNumberMatchingCode = codeStr;
-              _updateNumberChoices(codeStr);
-            });
+        try {
+          final status = data['status']?.toString().toUpperCase();
+          final userResp = data['userResponse']?.toString();
+          if (status == 'VERIFIED' || status == 'SUCCESS' || status == 'APPROVED') {
+            OneAuthSnackBar.show(context, message: 'Push Verification Approved!');
+            _notifyComplete(true);
+            return;
+          } else if (status == 'DECLINED' || status == 'DENIED' || status == 'REJECTED' || status == 'FAILED' || userResp == 'false') {
+            OneAuthSnackBar.show(context, message: 'Push Verification Denied.', isError: true);
+            _notifyComplete(false);
+            return;
           }
+
+          final pushTxnId = data['txnId'];
+          if (pushTxnId == widget.txnId || widget.txnId.isEmpty) {
+            final pushCode = data['numberMatchingCode'] ?? data['number_matching_code'];
+            final authType = data['authenticationType'] ?? data['authType'];
+
+            if (pushCode != null || authType == 'NUMBER_MATCHING') {
+              final codeStr = formatNumberMatchingCode(pushCode) ?? '042';
+              setState(() {
+                _currentNumberMatchingCode = codeStr;
+                _updateNumberChoices(codeStr);
+              });
+            }
+          }
+        } catch (e) {
+          debugPrint('OneAuth PushVerification: Error processing FCM challenge data: $e');
         }
       }
     });
   }
 
   void _updateNumberChoices(String codeStr) {
-    final codeInt = int.tryParse(codeStr) ?? 42;
-    final targetLen = codeStr.isNotEmpty ? codeStr.length : 3;
-    final choice2 = ((codeInt + 17) % 150 + 10).toString().padLeft(targetLen, '0');
-    final choice3 = ((codeInt + 43) % 150 + 10).toString().padLeft(targetLen, '0');
-    _numberChoices = [codeStr, choice2, choice3]..shuffle();
+    try {
+      final codeInt = int.tryParse(codeStr) ?? 42;
+      final targetLen = codeStr.isNotEmpty ? codeStr.length : 3;
+      final choice2 = ((codeInt + 17) % 150 + 10).toString().padLeft(targetLen, '0');
+      final choice3 = ((codeInt + 43) % 150 + 10).toString().padLeft(targetLen, '0');
+      _numberChoices = [codeStr, choice2, choice3]..shuffle();
+    } catch (e) {
+      debugPrint('OneAuth PushVerification: Error updating number choices: $e');
+    }
   }
 
   @override
@@ -148,6 +164,7 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
         _notifyComplete(true);
       }
     } catch (e) {
+      debugPrint('OneAuth PushVerification: Error during verification: $e');
       if (mounted) {
         OneAuthSnackBar.show(
           context,
