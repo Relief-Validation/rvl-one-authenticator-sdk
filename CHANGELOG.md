@@ -1,3 +1,11 @@
+## 0.7.0
+
+* Added `TransactionHashService` supporting SHA-256 canonical JSON transaction hashing and payload verification.
+* Exposed `TransactionHashService` and `TransactionChallengeRequest` in public SDK API exports.
+* Enhanced `OneAuth` transaction challenge creation and signing orchestration (`createTransactionChallenge`, `submitTransactionSignature`).
+* Added `OneAuthSnackBar` UI notification component for styled feedback messages.
+* Comprehensive documentation and integration guide updates in `README.md`.
+
 ## 0.6.0
 
 * Added `SecurityService` with real-time threat monitoring stream (`threatStream`), detecting root/jailbreak, emulators, debuggers, hooking frameworks (Frida), and active VPN connections.
