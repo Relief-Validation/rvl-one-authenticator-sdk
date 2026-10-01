@@ -18,6 +18,7 @@ dependencies:
   dio_cache_interceptor: ^3.5.0
   local_auth: ^2.3.0
   crypto: ^3.0.3
+  decimal: ^3.0.0
   flutter_secure_storage: ^9.0.0
   package_info_plus: ^8.0.0
   envied: ^0.5.4+1

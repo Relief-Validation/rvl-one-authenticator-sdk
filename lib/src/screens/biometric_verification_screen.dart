@@ -12,12 +12,14 @@ class OneAuthBiometricVerificationScreen extends StatefulWidget {
   final String txnId;
   final String txnHash;
   final Function onComplete;
+  final Map<String, dynamic>? transactionRequest;
 
   const OneAuthBiometricVerificationScreen({
     super.key,
     required this.txnId,
     required this.txnHash,
     required this.onComplete,
+    this.transactionRequest,
   });
 
   @override
@@ -182,6 +184,7 @@ class _OneAuthBiometricVerificationScreenState
           pin: 'BIOMETRIC_APPROVED',
           authType: 'BIOMETRIC',
           userResponse: 'true',
+          transactionRequest: widget.transactionRequest,
         );
 
         if (!mounted) return;

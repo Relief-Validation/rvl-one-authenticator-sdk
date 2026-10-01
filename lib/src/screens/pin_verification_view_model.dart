@@ -7,6 +7,7 @@ class OneAuthPinVerificationViewModel extends ChangeNotifier {
   final String txnId;
   final String txnHash;
   final int pinLength;
+  final Map<String, dynamic>? transactionRequest;
 
   String? _numberMatchingCode;
   bool _isLoading = false;
@@ -17,6 +18,7 @@ class OneAuthPinVerificationViewModel extends ChangeNotifier {
     required this.txnHash,
     String? numberMatchingCode,
     required this.pinLength,
+    this.transactionRequest,
   }) : _numberMatchingCode = formatNumberMatchingCode(numberMatchingCode);
 
   String? get numberMatchingCode => _numberMatchingCode;
@@ -62,6 +64,7 @@ class OneAuthPinVerificationViewModel extends ChangeNotifier {
         pin: pin,
         authType: pinLength == 6 ? 'TOTP' : 'PIN',
         selectedNumberMatchingCode: _numberMatchingCode,
+        transactionRequest: transactionRequest,
       );
       
       _isLoading = false;

@@ -17,6 +17,7 @@ class OneAuthPinVerificationScreen extends StatefulWidget {
   final String? numberMatchingCode;
   final VoidCallback onComplete;
   final int pinLength;
+  final Map<String, dynamic>? transactionRequest;
 
   const OneAuthPinVerificationScreen({
     super.key,
@@ -25,6 +26,7 @@ class OneAuthPinVerificationScreen extends StatefulWidget {
     this.numberMatchingCode,
     required this.onComplete,
     this.pinLength = 4,
+    this.transactionRequest,
   });
 
   @override
@@ -47,6 +49,7 @@ class _OneAuthPinVerificationScreenState extends State<OneAuthPinVerificationScr
       txnHash: widget.txnHash,
       numberMatchingCode: widget.numberMatchingCode,
       pinLength: widget.pinLength,
+      transactionRequest: widget.transactionRequest,
     );
     _pinControllers = List.generate(widget.pinLength, (_) => TextEditingController());
     _pinFocusNodes = List.generate(widget.pinLength, (_) => FocusNode());

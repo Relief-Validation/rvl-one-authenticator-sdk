@@ -7,22 +7,19 @@ Unified authentication and identity SDK for mobile applications, providing a sec
 ## Core Principles
 
 - **Infrastructure vs. Business**: OneAuth manages the cryptographic handshake, device key generation, and client-level authentication, while your application manages business-specific user data and logic.
-- **Client Handshake**: Automatically authenticates your mobile app instance with the identity server using `clientSecret` and dynamic `appPackageId`.
-- **Pre-Authenticated Networking**: Provides a pre-configured `Dio` client that automatically injects `X-Client-Token` into every request.
 - **Hardware-Backed Security**: Generates and stores cryptographic keys inside the device's Secure Enclave / TEE for hardware-level transaction signing.
-- **Secure Persistence**: Uses `flutter_secure_storage` to ensure all sensitive data (TOTP secrets, tokens) is encrypted at rest.
+- **Canonical Payload Hashing**: Computes deterministic SHA-256 hashes (`TransactionHashService`) across canonical JSON representations for transaction integrity (`X-SIGNATURE`).
+- **Secure Persistence**: Uses `flutter_secure_storage` to ensure all sensitive data (TOTP secrets, certificates, tokens) is encrypted at rest.
 
 ---
 
 ## Features
 
-- **Automated Client Auth**: Seamlessly fetches and manages client-level tokens.
-- **Ready-to-Use MFA Flows**: Pre-built screens for Biometrics, PIN, TOTP, and Push Approval.
-- **Hardware Transaction Signing**: Signs transaction challenge hashes with hardware-backed private keys.
+- **Ready-to-Use MFA Flows**: High-level orchestration via `startEnrollmentFlow` and `verifyTransaction`.
+- **Transaction Hash Service**: Built-in canonical JSON serialization and SHA-256 computation (`TransactionHashService`).
+- **Hardware Transaction Signing**: Signs transaction challenge hashes with hardware-backed private keys in the TEE/Secure Enclave.
 - **Runtime Threat Detection**: Proactive monitoring for Root/Jailbreak, Emulators, and Hooking (Frida) via **freeRASP**.
-- **Secure Configuration**: Obfuscated secrets powered by **Envied** to prevent reverse engineering.
-- **Response Caching**: Integrated `dio_cache_interceptor` for optimized performance and offline resilience.
-- **Branded UI**: Professional Material 3 components with glassmorphism and signature gradients.
+- **Branded UI**: Professional Material 3 components for Biometrics, PIN, TOTP, and Push Approval.
 
 ---
 
@@ -50,16 +47,7 @@ dependencies:
       ref: v0.6.0
 ```
 
-### Via Git Repository (SSH)
-```yaml
-dependencies:
-  one_auth:
-    git:
-      url: git@github.com:Relief-Validation/rvl-one-authenticator-sdk.git
-      ref: v0.6.0
-```
-
-### Local Path (Monorepo)
+### Via Local Path (Monorepo)
 ```yaml
 dependencies:
   one_auth:
@@ -77,14 +65,14 @@ dependencies:
    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
    ```
 
-2. In `android/app/src/main/kotlin/.../MainActivity.kt`, ensure `MainActivity` extends `FlutterFragmentActivity` to support biometric authentication:
+2. In `android/app/src/main/kotlin/.../MainActivity.kt`, ensure `MainActivity` extends `FlutterFragmentActivity`:
    ```kotlin
    import io.flutter.embedding.android.FlutterFragmentActivity
 
    class MainActivity: FlutterFragmentActivity()
    ```
 
-3. Ensure your `minSdkVersion` in `android/app/build.gradle` is at least `23`.
+3. Ensure `minSdkVersion` in `android/app/build.gradle` is at least `23`.
 
 ### iOS
 Add `NSFaceIDUsageDescription` to your `ios/Runner/Info.plist`:
@@ -95,48 +83,9 @@ Add `NSFaceIDUsageDescription` to your `ios/Runner/Info.plist`:
 
 ---
 
-## SDK Initialization & Client Handshake
+## MFA Enrollment Flow (`startEnrollmentFlow`)
 
-Initialize the SDK, typically during app startup or before launching authentication features.
-
-```dart
-import 'package:one_auth/one_auth.dart';
-
-final auth = OneAuth();
-
-// Optional: Listen to client auth status changes
-auth.onClientStatusChanged.listen((isAuthenticated) {
-  print('OneAuth SDK is authenticated: $isAuthenticated');
-});
-
-// Perform the client-level handshake with the security server
-await auth.initialize(
-  clientSecret: 'YOUR_CLIENT_SECRET',
-);
-```
-
----
-
-## User Data & Setup Screen
-
-The `OneAuthSetupScreen` requires a `OneAuthUser` object as a payload. This object carries the user's identity and banking details to the OneAuth orchestration layer.
-
-### `OneAuthUser` Model
-
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `id` | `String` (Required) | The unique identifier of the user in the bank's system. |
-| `name` | `String` (Required) | Full name of the user. |
-| `email` | `String` (Required) | Email address. |
-| `phoneNumber` | `String?` | Mobile phone number. |
-| `nid` | `String?` | National ID number for verification. |
-| `dob` | `String?` | Date of birth (format: `YYYY-MM-DD`). |
-| `accountNumber` | `String?` | Primary bank account number. |
-| `profileImageUrl` | `String?` | URL for the user's profile picture. |
-| `pin` | `String?` | PIN code or TOTP verification code. |
-| `preferredAuthenticationType` | `String?` | Set during enrollment (e.g. `'PIN'`, `'BIOMETRIC'`, `'TOTP'`, `'PUSH'`, `'NUMBER_MATCHING'`). |
-
-### Launching MFA Enrollment Flow
+Pass the user data and optional auth token to launch the complete pre-built enrollment UI sequence (Setup → Device Key Registration → MFA Setup).
 
 ```dart
 final oneAuthUser = OneAuthUser(
@@ -149,126 +98,93 @@ final oneAuthUser = OneAuthUser(
   dob: '1990-01-01',
 );
 
+// Optional: Retrieve client/auth token from app level
+final token = await authService.getClientToken();
+
+// Launch Enrollment Flow
 await OneAuth().startEnrollmentFlow(
   context,
   user: oneAuthUser,
+  token: token,
 );
 ```
 
 ---
 
-## Activation Flow (MFA Enrollment)
+## Transaction Signing & Canonical Hashing
 
-The activation process is orchestrated using pre-built UI components from the SDK:
+### 1. Generating Canonical Signature (`X-SIGNATURE`)
 
-1. **Setup Screen (`OneAuthSetupScreen`)**: Presented to the user for consent and data confirmation (NID, Account Number, etc.).
-2. **Status Screen (`OneAuthStatusScreen`)**: Orchestrates the background registration stages:
-   - **Step 1**: Generating device signature (Hardware Key generation in TEE/Enclave).
-   - **Step 2**: Identity Verification (Nonce fetch & CSR Handshake).
-   - **Step 3**: Finalizing Security Profile.
-3. **Verification Method Selection (`OneAuthVerificationModelScreen`)**: Allows the user to select and set up their preferred authentication method (PIN, Biometrics, TOTP).
-4. **Completion (`OneAuthSnackBar`)**: Provides immediate visual feedback upon successful activation.
-
----
-
-## Transaction Signing (Transfer Flow)
-
-High-value operations (e.g., money transfers) require hardware-backed digital signatures.
-
-> [!IMPORTANT]
-> Always call `await OneAuth().initialize(clientSecret: '...')` before initiating the signing session to ensure the client security token is valid.
-
-### Step-by-Step Signing Flow
-
-1. **Initialize SDK**: Call `await OneAuth().initialize(clientSecret: '...')` to ensure the client
-2. **Challenge Generation**: Request a signing challenge from your Core Banking System (CBS) / backend API.
-
-#### Challenge Payload Example (Sent to CBS Backend)
-| Field | Description |
-| :--- | :--- |
-| `bankTxnId` | Unique transaction reference from the bank system. |
-| `customerUniqueKey` | The persistent Authenticator User ID. |
-| `fromAccount` | Source account number. |
-| `toAccount` | Destination account number. |
-| `amount` | Transaction amount. |
-| `currency` | Currency code (e.g. `'BDT'`). |
-
-#### Challenge Response Parameters (Received from Backend)
-| Field | Description                                              |
-| :--- |:---------------------------------------------------------|
-| `txnId` | Internal SDK transaction ID.                             |
-| `txnHash` | SHA-256 hash of the transaction data to be signed.       |
-| `authenticationType` | Requested verification method (e.g., `'PIN'`, `'TOTP'`). |
-
-#### Launching the Verification UI
+Use `TransactionHashService` to build byte-for-byte canonical JSON payloads and generate SHA-256 hashes matching the backend format. Key sorting order is strictly alphabetical: `amount`, `bankTxnId`, `currency`, `customerUniqueKey` *(if present)*, `fromAccount`, `toAccount`.
 
 ```dart
-final challengeResult = await apiService.initChallenge(...);
+final service = TransactionHashService();
+final txnRequest = TransactionChallengeRequest(
+  amount: '5000.00',
+  bankTxnId: bankTxnId,
+  customerUniqueKey: 'CUST-987654321',
+  currency: 'BDT',
+  fromAccount: '1234567890',
+  toAccount: '0987654321',
+);
 
-final txnId = challengeResult['txnId'];
-final txnHash = challengeResult['txnHash'];
-final authType = challengeResult['authenticationType'];
+// Compute canonical SHA-256 hex string
+final xSignature = service.sha256Hex(txnRequest);
+```
 
-if (txnId != null && txnHash != null) {
-  // 1. Ensure SDK session is initialized
-  await OneAuth().initialize(clientSecret: 'YOUR_CLIENT_SECRET');
+### 2. Launching Verification UI (`verifyTransaction`)
 
-  // 2. Launch SDK Verification Screen based on authType
-  final bool? verified = await OneAuth().verifyTransaction(
-    context,
-    txnId: txnId,
-    txnHash: txnHash,
-    authType: authType,
-  );
+Pass `txnId`, `txnHash`, `authType`, `token`, and `transactionRequest` to `verifyTransaction`. The SDK automatically embeds the nested `transactionRequest` map and `X-SIGNATURE` header during signature submission.
 
-  // 3. Handle verification result
-  if (verified != true) {
-    // Transaction rejected or cancelled
-    return;
-  }
+```dart
+final bool? verified = await OneAuth().verifyTransaction(
+  context,
+  txnId: txnId,
+  txnHash: txnHash,
+  authType: authType,
+  token: token,
+  transactionRequest: {
+    'bankTxnId': bankTxnId,
+    'customerUniqueKey': 'CUST-987654321',
+    'fromAccount': '1234567890',
+    'toAccount': '0987654321',
+    'amount': '5000.00',
+    'currency': 'BDT',
+  },
+);
 
-  // 4. Submit transaction to banking backend
-  await apiService.executeTransfer(...);
+if (verified == true) {
+  // Transaction signed & verified successfully
 }
 ```
-```
 
-3. **Hardware Signing**: The SDK uses the Secure Enclave / TEE to sign `txnHash` with the private key.
-4. **Execution**: Upon verification, proceed to execute the transfer on your banking backend.
+### 3. Outgoing Signature Request Payload Structure
 
----
+When submitting a signature, `OneAuth` sends the following payload structure to `/transactions/{txnId}/signature` with the computed `'X-SIGNATURE'` header:
 
-## Pre-Authenticated Dio Networking
-
-Use the SDK's built-in `dio` client to make authenticated calls to your backend services:
-
-```dart
-final dio = OneAuth().dio;
-
-// Automatically includes 'X-Client-Token' and configured interceptors
-final response = await dio.post('/your-endpoint', data: {
-  'key': 'value',
-});
+```json
+{
+  "deviceUuid": "550e8400-e29b-41d4-a716-446655440000",
+  "certificateSerial": "123456789",
+  "txnHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "signatureBase64": "MEQCIG...",
+  "deviceIntegrity": { ... },
+  "pinCode": "1234",
+  "transactionRequest": {
+    "bankTxnId": "TXN-2026-0001",
+    "customerUniqueKey": "CUST-987654321",
+    "fromAccount": "1234567890",
+    "toAccount": "0987654321",
+    "amount": "5000.00",
+    "currency": "BDT"
+  }
+}
 ```
 
 ---
 
 ## Security Features
 
-- **Runtime Threat Detection**: Integrates **freeRASP** and native Android checks to detect root/jailbreak, debuggers, emulators, active VPNs, and dynamic instrumentation hooks (Frida).
-- **Real-Time Threat Monitoring (`SecurityService`)**: Listen to live security alerts and handle threats reactively in your UI:
-  ```dart
-  SecurityService().threatStream.listen((threatEvent) {
-    print('Security Threat: ${threatEvent.title} - ${threatEvent.description}');
-  });
-  ```
+- **Runtime Threat Detection**: Integrates **freeRASP** to detect root/jailbreak, debuggers, emulators, and dynamic instrumentation hooks (Frida).
 - **Environment Obfuscation**: Secure secrets and base URLs are compiled and obfuscated via **Envied**.
-- **Exception Handling**: Typed security exceptions (`OneAuthSecurityException`, `OneAuthCryptoException`) allow fine-grained error handling.
-
----
-
-## Dependencies
-
-- **Networking**: `dio`, `dio_cache_interceptor`
-- **Security**: `flutter_secure_storage`, `local_auth`, `freerasp`, `crypto`, `envied`
-- **Device Info**: `device_info_plus`
+- **Exception Handling**: Typed security exceptions (`OneAuthSecurityException`, `OneAuthCryptoException`, `OneAuthNetworkException`) for error handling.

@@ -13,6 +13,7 @@ class OneAuthPushVerificationScreen extends StatefulWidget {
   final String? numberMatchingCode;
   final String? authType;
   final Function onComplete;
+  final Map<String, dynamic>? transactionRequest;
 
   const OneAuthPushVerificationScreen({
     super.key,
@@ -21,6 +22,7 @@ class OneAuthPushVerificationScreen extends StatefulWidget {
     this.numberMatchingCode,
     this.authType,
     required this.onComplete,
+    this.transactionRequest,
   });
 
   @override
@@ -157,6 +159,7 @@ class _OneAuthPushVerificationScreenState extends State<OneAuthPushVerificationS
         pin: selectedNumber ?? _currentNumberMatchingCode ?? 'PUSH_APPROVED',
         authType: widget.authType ?? (_currentNumberMatchingCode != null ? 'NUMBER_MATCHING' : 'PUSH'),
         selectedNumberMatchingCode: selectedNumber ?? _currentNumberMatchingCode,
+        transactionRequest: widget.transactionRequest,
       );
 
       if (mounted) {

@@ -54,11 +54,7 @@ class AuthInterceptor extends Interceptor {
       }
     }
 
-    // Skip token injection for the client authentication endpoint
-    if (options.path.contains('/auth/client/token')) {
-      debugPrint('OneAuth Interceptor: Skipping token for client auth endpoint');
-      return super.onRequest(options, handler);
-    }
+
     
     if (apiKey != null) {
       options.headers['X-API-KEY'] = apiKey;
@@ -100,7 +96,6 @@ class AuthInterceptor extends Interceptor {
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     // 1. If it's a 401 and not already a retry, and not the token endpoint itself
     if (err.response?.statusCode == 401 && 
-        !err.requestOptions.path.contains('/auth/client/token') &&
         err.requestOptions.extra['retried'] != true) {
       
       debugPrint('OneAuth Interceptor: 401 Unauthorized detected on ${err.requestOptions.path}. Attempting silent refresh...');

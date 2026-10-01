@@ -81,6 +81,7 @@ abstract class OneAuthInterface {
     String? authType,
     String? selectedNumberMatchingCode,
     String? userResponse,
+    Map<String, dynamic>? transactionRequest,
   });
 
   /// Checks the enrollment status of the device.
@@ -101,6 +102,8 @@ abstract class OneAuthInterface {
     required String txnId,
     required String txnHash,
     required String authType,
+    String? token,
+    Map<String, dynamic>? transactionRequest,
   });
 
   /// Retrieves the current device security and integrity state snapshot.
@@ -110,6 +113,7 @@ abstract class OneAuthInterface {
   Future<void> startEnrollmentFlow(
     BuildContext context, {
     required OneAuthUser user,
+    String? token,
     VoidCallback? onSuccess,
   });
 }

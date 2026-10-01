@@ -21,6 +21,7 @@ import 'core/csr_manager.dart';
 import 'core/push_manager.dart';
 import 'core/secure_id_manager.dart';
 import 'core/security_service.dart';
+import 'core/transaction_hash_service.dart';
 import 'screens/pin_verification_screen.dart';
 import 'screens/push_setup_screen.dart';
 import 'screens/push_verification_screen.dart';
@@ -51,7 +52,23 @@ class OneAuth implements OneAuthInterface {
   String? _nonceBase64;
   String? _authenticatorUserId;
   Map<String, dynamic>? _pendingEnrollmentData;
-  late DioClient _dioClient;
+  Map<String, dynamic>? _lastTransactionRequest;
+  DioClient? _dioClient;
+
+  DioClient get dioClient {
+    _dioClient ??= DioClient(
+      baseUrl: _baseUrl ?? Env.baseUrl,
+      apiKey: _clientSecret,
+      getClientToken: () async => _clientToken,
+      getUserToken: () async => _userToken,
+      getAuthenticatorUserId: () async => _authenticatorUserId,
+      onSecurityCheck: _ensureSecurity,
+      onRefreshToken: _refreshToken,
+      onSessionExpired: _handleSessionExpired,
+    );
+    return _dioClient!;
+  }
+
   final OneAuthPushManager _pushManager = OneAuthPushManager();
   GlobalKey<NavigatorState>? _navigatorKey;
 
@@ -63,7 +80,7 @@ class OneAuth implements OneAuthInterface {
       StreamController<bool>.broadcast();
 
   @override
-  Dio get dio => _dioClient.dio;
+  Dio get dio => dioClient.dio;
 
   @override
   GlobalKey<NavigatorState>? get navigatorKey => _navigatorKey;
@@ -81,7 +98,7 @@ class OneAuth implements OneAuthInterface {
       _pushManager.latestChallengeData;
 
   @override
-  Future<void> syncFcmToken() => _pushManager.syncFcmToken(_dioClient);
+  Future<void> syncFcmToken() => _pushManager.syncFcmToken(dioClient);
 
   @override
   Future<String?> getFcmToken() => _pushManager.getFcmToken();
@@ -172,6 +189,7 @@ class OneAuth implements OneAuthInterface {
 
     _dioClient = DioClient(
       baseUrl: _baseUrl!,
+      apiKey: _clientSecret,
       getClientToken: () async => _clientToken,
       getUserToken: () async => _userToken,
       getAuthenticatorUserId: () async => _authenticatorUserId,
@@ -183,11 +201,9 @@ class OneAuth implements OneAuthInterface {
     // Initialize freeRASP for security monitoring
     await _ensureSecurity();
 
-    await _authenticateClient();
-
     // Initialize FCM Push Manager internally
     await _pushManager.initialize(
-      dioClient: _dioClient,
+      dioClient: dioClient,
       firebaseOptions: firebaseOptions,
     );
 
@@ -266,14 +282,8 @@ class OneAuth implements OneAuthInterface {
   }
 
   Future<bool> _refreshToken() async {
-    debugPrint('OneAuth: Attempting silent token refresh...');
-    try {
-      await _authenticateClient();
-      return true;
-    } catch (e) {
-      debugPrint('OneAuth: Silent refresh failed: $e');
-      return false;
-    }
+    debugPrint('OneAuth: Silent refresh checked.');
+    return false;
   }
 
   Future<void> _ensureSecurity() async {
@@ -327,36 +337,7 @@ class OneAuth implements OneAuthInterface {
     }
   }
 
-  Future<void> _authenticateClient() async {
-    try {
-      final packageInfo = await pkg.PackageInfo.fromPlatform();
-      final appPackageId = packageInfo.packageName;
 
-      final response = await _dioClient.dio.post(
-        '/auth/client/token',
-        data: {
-          'clientSecret': _clientSecret,
-          'appPackageId': appPackageId,
-        },
-      );
-
-
-      _clientToken = response.data['token'] ??
-          response.data['data']?['token'] ??
-          response.data['access_token'] ??
-          response.data['accessToken'];
-      _clientStatusController.add(true);
-      debugPrint(
-          'OneAuth: Client Login Successful. Token: ${_clientToken?.substring(0, 10)}...');
-    } on DioException catch (e) {
-      _clientStatusController.add(false);
-      debugPrint('OneAuth: Client Login Failed: ${e.message}');
-      throw OneAuthAuthException(
-        e.message ?? 'Client Authentication Failed',
-        e,
-      );
-    }
-  }
 
   @override
   Future<void> setTotpSecret(String userId, String secret) async {
@@ -393,7 +374,7 @@ class OneAuth implements OneAuthInterface {
 
     debugPrint('OneAuth: Fetching enrollment nonce for $_authenticatorUserId...');
     try {
-      final response = await _dioClient.dio.post(
+      final response = await dioClient.dio.post(
         '/enrollment/nonce',
         data: {
           'bankId': _authenticatorUserId,
@@ -551,7 +532,7 @@ class OneAuth implements OneAuthInterface {
         }
       });
 
-      final response = await _dioClient.dio.post(
+      final response = await dioClient.dio.post(
         '/enrollment/csr',
         data: payload,
       );
@@ -697,6 +678,7 @@ class OneAuth implements OneAuthInterface {
     String? authType,
     String? selectedNumberMatchingCode,
     String? userResponse,
+    Map<String, dynamic>? transactionRequest,
   }) async {
     _ensureInitialized();
 
@@ -769,12 +751,16 @@ class OneAuth implements OneAuthInterface {
     final finalIntegrity = await getDeviceIntegrity();
     _validateIntegrity(finalIntegrity, 'Transaction submission');
 
+    final effectiveTransactionRequest = transactionRequest ?? _lastTransactionRequest;
+
     final payload = <String, dynamic>{
       "deviceUuid": deviceUuid,
       "certificateSerial": certificateSerial,
       "txnHash": txnHash,
       "signatureBase64": signatureBase64,
       "deviceIntegrity": finalIntegrity,
+      if (effectiveTransactionRequest != null)
+        "transactionRequest": effectiveTransactionRequest,
     };
 
     if (authType == 'TOTP' || (authType == null && pin.length == 6)) {
@@ -794,10 +780,33 @@ class OneAuth implements OneAuthInterface {
 
     developer.log('submitTransactionSignature request: $payload', name: 'OneAuth');
 
+    String? xSignature;
+    if (effectiveTransactionRequest != null) {
+      try {
+        final req = TransactionChallengeRequest(
+          amount: effectiveTransactionRequest['amount'],
+          bankTxnId: effectiveTransactionRequest['bankTxnId']?.toString() ?? '',
+          customerUniqueKey: effectiveTransactionRequest['customerUniqueKey']?.toString(),
+          currency: effectiveTransactionRequest['currency']?.toString() ?? 'BDT',
+          fromAccount: effectiveTransactionRequest['fromAccount']?.toString() ?? '',
+          toAccount: effectiveTransactionRequest['toAccount']?.toString() ?? '',
+        );
+        xSignature = TransactionHashService().sha256Hex(req);
+      } catch (e) {
+        debugPrint('OneAuth: Could not calculate X-SIGNATURE from transactionRequest: $e');
+      }
+    }
+    xSignature ??= txnHash;
+
     try {
-      final response = await _dioClient.dio.post(
+      final response = await dioClient.dio.post(
         '/transactions/$txnId/signature',
         data: payload,
+        options: Options(
+          headers: {
+            if (xSignature.isNotEmpty) 'X-SIGNATURE': xSignature,
+          },
+        ),
       );
       developer.log('submitTransactionSignature response: ${response.data}', name: 'OneAuth');
 
@@ -852,7 +861,7 @@ class OneAuth implements OneAuthInterface {
     debugPrint('OneAuth: Checking enrollment status for serial: $certificateSerial');
 
     try {
-      final response = await _dioClient.dio.get(
+      final response = await dioClient.dio.get(
         '/enrollment/status',
         queryParameters: {
           'certificateSerial': certificateSerial,
@@ -938,7 +947,7 @@ class OneAuth implements OneAuthInterface {
     debugPrint('OneAuth: Calling /verify with payload: $payload');
 
     try {
-      final response = await _dioClient.dio.post(
+      final response = await dioClient.dio.post(
         '/enrollment/verify',
         data: payload,
       );
@@ -998,7 +1007,19 @@ class OneAuth implements OneAuthInterface {
     required String txnId,
     required String txnHash,
     required String authType,
+    String? token,
+    Map<String, dynamic>? transactionRequest,
   }) async {
+    if (transactionRequest != null) {
+      _lastTransactionRequest = transactionRequest;
+    }
+    if (!_isInitialized) {
+      await initialize();
+    }
+    if (!context.mounted) return false;
+    if (token != null && token.isNotEmpty) {
+      setUserToken(token);
+    }
     final navigator = Navigator.of(context);
 
     if (authType == 'PIN' || authType == 'TOTP') {
@@ -1008,6 +1029,7 @@ class OneAuth implements OneAuthInterface {
             txnId: txnId,
             txnHash: txnHash,
             pinLength: authType == 'TOTP' ? 6 : 4,
+            transactionRequest: transactionRequest,
             onComplete: () => navigator.pop(true),
           ),
         ),
@@ -1019,6 +1041,7 @@ class OneAuth implements OneAuthInterface {
             txnId: txnId,
             txnHash: txnHash,
             authType: authType,
+            transactionRequest: transactionRequest,
             onComplete: (bool success) => navigator.pop(success),
           ),
         ),
@@ -1029,6 +1052,7 @@ class OneAuth implements OneAuthInterface {
           builder: (_) => OneAuthBiometricVerificationScreen(
             txnId: txnId,
             txnHash: txnHash,
+            transactionRequest: transactionRequest,
             onComplete: (bool success) => navigator.pop(success),
           ),
         ),
@@ -1042,8 +1066,16 @@ class OneAuth implements OneAuthInterface {
   Future<void> startEnrollmentFlow(
     BuildContext context, {
     required OneAuthUser user,
+    String? token,
     VoidCallback? onSuccess,
   }) async {
+    if (!_isInitialized) {
+      await initialize();
+    }
+    if (!context.mounted) return;
+    if (token != null && token.isNotEmpty) {
+      setUserToken(token);
+    }
     final navigator = Navigator.of(context);
 
     await navigator.push(
