@@ -1,3 +1,7 @@
+## 0.8.0
+
+* Public IP added.
+
 ## 0.7.0
 
 * Added `TransactionHashService` supporting SHA-256 canonical JSON transaction hashing and payload verification.
