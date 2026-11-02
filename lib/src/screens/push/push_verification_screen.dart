@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../core/theme.dart';
-import '../core/utils.dart';
-import '../widgets/app_bar.dart';
-import '../widgets/snack_bar.dart';
-import '../one_auth_impl.dart';
+import '../../core/theme.dart';
+import '../../core/utils.dart';
+import '../../widgets/app_bar.dart';
+import '../../widgets/snack_bar.dart';
+import '../../one_auth_impl.dart';
 
 /// Screen displayed when performing a transaction challenge requiring Push Approval or Number Matching verification.
 class OneAuthPushVerificationScreen extends StatefulWidget {

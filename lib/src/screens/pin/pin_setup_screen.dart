@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import '../core/theme.dart';
-import '../widgets/app_bar.dart';
-import '../widgets/primary_button.dart';
-import '../widgets/pin_input.dart';
-import '../models/user.dart';
+import '../../core/theme.dart';
+import '../../widgets/app_bar.dart';
+import '../../widgets/primary_button.dart';
+import '../../widgets/pin_input.dart';
+import '../../models/user.dart';
 import 'pin_setup_view_model.dart';
 
 class OneAuthPinSetupScreen extends StatefulWidget {
@@ -76,7 +76,7 @@ class _OneAuthPinSetupScreenState extends State<OneAuthPinSetupScreen> {
     final confirmPin = _confirmPinControllers.map((c) => c.text).join();
 
     final success = await _viewModel.setupPin(pin, confirmPin);
-    
+
     if (success) {
       if (mounted) widget.onComplete(pin);
     } else {

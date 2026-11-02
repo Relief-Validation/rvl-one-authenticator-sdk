@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import '../core/theme.dart';
-import '../widgets/app_bar.dart';
-import '../models/user.dart';
-import '../widgets/primary_button.dart';
-import '../widgets/snack_bar.dart';
+import '../../core/theme.dart';
+import '../../widgets/app_bar.dart';
+import '../../models/user.dart';
+import '../../widgets/primary_button.dart';
+import '../../widgets/snack_bar.dart';
 import 'status_view_model.dart';
 
 class OneAuthStatusScreen extends StatefulWidget {
@@ -129,8 +129,8 @@ class _OneAuthStatusScreenState extends State<OneAuthStatusScreen> with SingleTi
                         ),
                       const SizedBox(height: 40),
                       Text(
-                        _viewModel.isAlreadyValid 
-                            ? 'OneAuth Already Active' 
+                        _viewModel.isAlreadyValid
+                            ? 'OneAuth Already Active'
                             : 'Checking your OneAuth status',
                         textAlign: TextAlign.center,
                         style: OneAuthTheme.headingStyle(context),
@@ -175,8 +175,8 @@ class _OneAuthStatusScreenState extends State<OneAuthStatusScreen> with SingleTi
           height: 32,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: isCompleted 
-                ? Colors.blueAccent 
+            color: isCompleted
+                ? Colors.blueAccent
                 : (isActive ? (isDark ? Colors.grey[800] : Colors.white) : Colors.transparent),
             border: Border.all(
               color: isCompleted ? Colors.blueAccent : Colors.grey,
@@ -189,8 +189,8 @@ class _OneAuthStatusScreenState extends State<OneAuthStatusScreen> with SingleTi
                 : Text(
                     '$step',
                     style: TextStyle(
-                      color: isActive 
-                          ? (isDark ? Colors.white : Colors.black) 
+                      color: isActive
+                          ? (isDark ? Colors.white : Colors.black)
                           : Colors.grey,
                       fontWeight: FontWeight.bold,
                     ),
@@ -203,8 +203,8 @@ class _OneAuthStatusScreenState extends State<OneAuthStatusScreen> with SingleTi
           style: TextStyle(
             fontSize: 16,
             fontWeight: isActive || isCompleted ? FontWeight.bold : FontWeight.normal,
-            color: isActive || isCompleted 
-                ? OneAuthTheme.getPrimaryTextColor(context) 
+            color: isActive || isCompleted
+                ? OneAuthTheme.getPrimaryTextColor(context)
                 : Colors.grey,
           ),
         ),

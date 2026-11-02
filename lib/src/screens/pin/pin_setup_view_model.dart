@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import '../one_auth_impl.dart';
-import '../models/user.dart';
-import '../core/exceptions.dart';
+import '../../one_auth_impl.dart';
+import '../../models/user.dart';
+import '../../core/exceptions.dart';
 
 class OneAuthPinSetupViewModel extends ChangeNotifier {
   final OneAuthUser user;
   final int pinLength;
-  
+
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -45,7 +45,7 @@ class OneAuthPinSetupViewModel extends ChangeNotifier {
         preferredAuthenticationType: 'PIN',
       );
       await OneAuth().submitCsr(userWithPin);
-      
+
       _isLoading = false;
       notifyListeners();
       return true;

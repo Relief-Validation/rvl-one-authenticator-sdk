@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import '../models/user.dart';
-import '../core/theme.dart';
-import '../widgets/app_bar.dart';
-import '../widgets/primary_button.dart';
-import '../widgets/info_field.dart';
-import '../widgets/secondary_button.dart';
+import '../../models/user.dart';
+import '../../core/theme.dart';
+import '../../widgets/app_bar.dart';
+import '../../widgets/primary_button.dart';
+import '../../widgets/info_field.dart';
+import '../../widgets/secondary_button.dart';
 
 class OneAuthSetupScreen extends StatefulWidget {
   final OneAuthUser user;
@@ -60,11 +60,11 @@ class _OneAuthSetupScreenState extends State<OneAuthSetupScreen> {
                       const SizedBox(width: 16),
                       CircleAvatar(
                         radius: 40,
-                        backgroundImage: widget.user.profileImageUrl != null 
-                            ? NetworkImage(widget.user.profileImageUrl!) 
+                        backgroundImage: widget.user.profileImageUrl != null
+                            ? NetworkImage(widget.user.profileImageUrl!)
                             : null,
-                        child: widget.user.profileImageUrl == null 
-                            ? const Icon(Icons.person, size: 40) 
+                        child: widget.user.profileImageUrl == null
+                            ? const Icon(Icons.person, size: 40)
                             : null,
                       ),
                     ],

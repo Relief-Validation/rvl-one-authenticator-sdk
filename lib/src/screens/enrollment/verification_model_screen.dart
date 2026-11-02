@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
-import '../widgets/app_bar.dart';
-import '../widgets/primary_button.dart';
-import '../one_auth_impl.dart';
-import '../models/authentication_type.dart';
-import '../models/user.dart';
-import 'pin_setup_screen.dart';
-import 'biometric_setup_screen.dart';
-import 'totp_setup_screen.dart';
-import 'push_setup_screen.dart';
+import '../../widgets/app_bar.dart';
+import '../../widgets/primary_button.dart';
+import '../../one_auth_impl.dart';
+import '../../models/authentication_type.dart';
+import '../../models/user.dart';
+import '../pin/pin_setup_screen.dart';
+import '../biometric/biometric_setup_screen.dart';
+import '../totp/totp_setup_screen.dart';
+import '../push/push_setup_screen.dart';
 
 class OneAuthVerificationModelScreen extends StatefulWidget {
   final OneAuthUser user;
@@ -240,4 +240,3 @@ class _OneAuthVerificationModelScreenState extends State<OneAuthVerificationMode
     );
   }
 }
-

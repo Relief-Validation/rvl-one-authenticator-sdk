@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../core/theme.dart';
-import '../core/totp_generator.dart';
-import '../widgets/app_bar.dart';
-import '../widgets/primary_button.dart';
-import '../widgets/notification_banner.dart';
-import '../widgets/snack_bar.dart';
-import '../models/user.dart';
-import '../one_auth_impl.dart';
+import '../../core/theme.dart';
+import '../../core/totp_generator.dart';
+import '../../widgets/app_bar.dart';
+import '../../widgets/primary_button.dart';
+import '../../widgets/notification_banner.dart';
+import '../../widgets/snack_bar.dart';
+import '../../models/user.dart';
+import '../../one_auth_impl.dart';
 
 class OneAuthTotpSetupScreen extends StatefulWidget {
   final OneAuthUser user;
@@ -116,14 +116,14 @@ class _OneAuthTotpSetupScreenState extends State<OneAuthTotpSetupScreen> {
     if (value.length > 1) {
       // Handle paste
       final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
-      
+
       // If it's a 6-digit code, always fill from the start
       final startIdx = digits.length >= 6 ? 0 : index;
-      
+
       for (var i = 0; i < digits.length && (startIdx + i) < 6; i++) {
         _controllers[startIdx + i].text = digits[i];
       }
-      
+
       // Move focus to the end of pasted digits or last box
       final nextIndex = (startIdx + digits.length).clamp(0, 5);
       _focusNodes[nextIndex].requestFocus();
@@ -132,7 +132,7 @@ class _OneAuthTotpSetupScreenState extends State<OneAuthTotpSetupScreen> {
     } else if (value.isEmpty && index > 0) {
       _focusNodes[index - 1].requestFocus();
     }
-    
+
     if (_errorMessage != null) {
       setState(() => _errorMessage = null);
     }
@@ -224,7 +224,7 @@ class _OneAuthTotpSetupScreenState extends State<OneAuthTotpSetupScreen> {
                                 textAlign: TextAlign.center,
                                 keyboardType: TextInputType.number,
                                 style: TextStyle(
-                                  fontSize: 24, 
+                                  fontSize: 24,
                                   fontWeight: FontWeight.bold,
                                   color: OneAuthTheme.getPrimaryTextColor(context),
                                 ),

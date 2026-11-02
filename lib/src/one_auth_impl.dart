@@ -22,14 +22,7 @@ import 'core/push_manager.dart';
 import 'core/secure_id_manager.dart';
 import 'core/security_service.dart';
 import 'core/transaction_hash_service.dart';
-import 'screens/pin_verification_screen.dart';
-import 'screens/push_setup_screen.dart';
-import 'screens/push_verification_screen.dart';
-import 'screens/biometric_verification_screen.dart';
-import 'screens/setup_screen.dart';
-import 'screens/status_screen.dart';
-import 'screens/verification_model_screen.dart';
-import 'screens/change_auth_type_screen.dart';
+import 'screens/screens.dart';
 import 'widgets/snack_bar.dart';
 import 'package:freerasp/freerasp.dart';
 

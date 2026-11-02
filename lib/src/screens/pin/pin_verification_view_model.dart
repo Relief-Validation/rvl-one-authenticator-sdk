@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../one_auth_impl.dart';
-import '../core/exceptions.dart';
-import '../core/utils.dart';
+import '../../one_auth_impl.dart';
+import '../../core/exceptions.dart';
+import '../../core/utils.dart';
 
 class OneAuthPinVerificationViewModel extends ChangeNotifier {
   final String txnId;
@@ -53,11 +53,10 @@ class OneAuthPinVerificationViewModel extends ChangeNotifier {
       notifyListeners();
 
       // Re-initialize the SDK to ensure we have a fresh client token
-      // In a real app, this might be handled globally, but here we follow existing logic
       await OneAuth().initialize(
         clientSecret: '9cca0a9dc2edc5bb3451f76b56a57a6c475f77b7242945a31471be',
       );
-      
+
       await OneAuth().submitTransactionSignature(
         txnId: txnId,
         txnHash: txnHash,
@@ -66,7 +65,7 @@ class OneAuthPinVerificationViewModel extends ChangeNotifier {
         selectedNumberMatchingCode: _numberMatchingCode,
         transactionRequest: transactionRequest,
       );
-      
+
       _isLoading = false;
       notifyListeners();
       return true;

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../one_auth.dart';
-import '../core/exceptions.dart';
+import '../../../one_auth.dart';
+import '../../core/exceptions.dart';
 
 class OneAuthStatusViewModel extends ChangeNotifier {
   final OneAuthUser user;
@@ -36,7 +36,7 @@ class OneAuthStatusViewModel extends ChangeNotifier {
         _isAlreadyValid = true;
         _currentStep = 3;
         notifyListeners();
-        return true; 
+        return true;
       }
 
       // If we are here, either it's not enrolled or not valid (e.g. revoked, not found)
@@ -44,14 +44,14 @@ class OneAuthStatusViewModel extends ChangeNotifier {
       if (reason == 'ACCOUNT_LOCKED') {
         throw OneAuthException('Your account is locked. Please contact support.');
       }
-      
+
       debugPrint('OneAuth: Proceeding with enrollment steps. Status reason: $reason');
 
       // Step 1: Fetch Nonce
       _currentStep = 1;
       notifyListeners();
       final nonceData = await OneAuth().getEnrollmentNonce(user.id);
-      
+
       await Future.delayed(const Duration(milliseconds: 500));
 
       // Step 2: Verification & Hardware CSR Generation

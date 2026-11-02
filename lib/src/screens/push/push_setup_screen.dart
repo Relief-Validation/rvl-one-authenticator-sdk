@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../widgets/app_bar.dart';
-import '../models/user.dart';
-import '../one_auth_impl.dart';
-import '../core/theme.dart';
-import '../core/utils.dart';
-import '../widgets/snack_bar.dart';
+import '../../widgets/app_bar.dart';
+import '../../models/user.dart';
+import '../../one_auth_impl.dart';
+import '../../core/theme.dart';
+import '../../core/utils.dart';
+import '../../widgets/snack_bar.dart';
 
 enum PushSetupType { approval, matching }
 

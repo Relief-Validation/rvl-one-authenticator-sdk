@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
-import '../core/theme.dart';
-import '../widgets/app_bar.dart';
-import '../widgets/primary_button.dart';
-import '../widgets/snack_bar.dart';
-import '../one_auth_impl.dart';
+import '../../core/theme.dart';
+import '../../widgets/app_bar.dart';
+import '../../widgets/primary_button.dart';
+import '../../widgets/snack_bar.dart';
+import '../../one_auth_impl.dart';
 
 /// Screen displayed when authorizing a transaction requiring Biometric verification.
 class OneAuthBiometricVerificationScreen extends StatefulWidget {

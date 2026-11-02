@@ -1,14 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import '../core/theme.dart';
-import '../core/totp_generator.dart';
-import '../widgets/app_bar.dart';
-import '../widgets/primary_button.dart';
-import '../widgets/pin_input.dart';
-import '../widgets/notification_banner.dart';
-import '../widgets/snack_bar.dart';
-import '../one_auth_impl.dart';
+import '../../core/theme.dart';
+import '../../core/totp_generator.dart';
+import '../../widgets/app_bar.dart';
+import '../../widgets/primary_button.dart';
+import '../../widgets/pin_input.dart';
+import '../../widgets/notification_banner.dart';
+import '../../widgets/snack_bar.dart';
+import '../../one_auth_impl.dart';
 import 'pin_verification_view_model.dart';
 
 class OneAuthPinVerificationScreen extends StatefulWidget {
