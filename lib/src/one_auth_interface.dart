@@ -116,4 +116,36 @@ abstract class OneAuthInterface {
     String? token,
     VoidCallback? onSuccess,
   });
+
+  /// Launches the Change Authentication Type flow.
+  Future<void> startChangeAuthTypeFlow(
+    BuildContext context, {
+    required OneAuthUser user,
+    String? token,
+    VoidCallback? onSuccess,
+  });
+
+  /// Initiates the authentication type change session.
+  Future<Map<String, dynamic>> initiateAuthTypeChange(String customerUniqueKey);
+
+  /// Verifies the current authentication type credentials.
+  Future<Map<String, dynamic>> verifyAuthTypeChange({
+    required String sessionToken,
+    required String customerUniqueKey,
+    String? pinCode,
+    String? totpCode,
+    String? userResponse,
+  });
+
+  /// Confirms and completes the preferred authentication type change.
+  Future<Map<String, dynamic>> confirmAuthTypeChange({
+    required String sessionToken,
+    required String customerUniqueKey,
+    required String preferredAuthenticationType,
+    String? pinCode,
+    String? totpCode,
+    String? userResponse,
+  });
 }
+
+

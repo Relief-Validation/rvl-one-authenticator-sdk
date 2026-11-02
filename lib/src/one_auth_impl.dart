@@ -29,6 +29,7 @@ import 'screens/biometric_verification_screen.dart';
 import 'screens/setup_screen.dart';
 import 'screens/status_screen.dart';
 import 'screens/verification_model_screen.dart';
+import 'screens/change_auth_type_screen.dart';
 import 'widgets/snack_bar.dart';
 import 'package:freerasp/freerasp.dart';
 
@@ -1117,4 +1118,153 @@ class OneAuth implements OneAuthInterface {
       ),
     );
   }
+
+  Future<Response> _getWithFallback(String path, {Map<String, dynamic>? queryParameters}) async {
+    try {
+      return await dioClient.dio.get(path, queryParameters: queryParameters);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404 && !path.startsWith('/api/v1')) {
+        return await dioClient.dio.get('/api/v1$path', queryParameters: queryParameters);
+      }
+      rethrow;
+    }
+  }
+
+  Future<Response> _postWithFallback(String path, {dynamic data}) async {
+    try {
+      return await dioClient.dio.post(path, data: data);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404 && !path.startsWith('/api/v1')) {
+        return await dioClient.dio.post('/api/v1$path', data: data);
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> initiateAuthTypeChange(String customerUniqueKey) async {
+    await _ensureSecurity();
+    debugPrint('OneAuth: Initiating Auth Type Change for $customerUniqueKey...');
+    try {
+      final response = await _getWithFallback(
+        '/customer/auth-type/change',
+        queryParameters: {'customerUniqueKey': customerUniqueKey},
+      );
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      debugPrint('OneAuth: Error initiating auth type change: ${e.message}');
+      throw OneAuthNetworkException(
+        e.message ?? 'Failed to initiate auth type change',
+        statusCode: e.response?.statusCode,
+        originalError: e,
+      );
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> verifyAuthTypeChange({
+    required String sessionToken,
+    required String customerUniqueKey,
+    String? pinCode,
+    String? totpCode,
+    String? userResponse,
+  }) async {
+    await _ensureSecurity();
+    debugPrint('OneAuth: Verifying Auth Type Change for session $sessionToken...');
+    final payload = <String, dynamic>{
+      'sessionToken': sessionToken,
+      'customerUniqueKey': customerUniqueKey,
+      if (pinCode != null) 'pinCode': pinCode,
+      if (totpCode != null) 'totpCode': totpCode,
+      if (userResponse != null) 'userResponse': userResponse,
+    };
+
+    try {
+      final response = await _postWithFallback(
+        '/customer/auth-type/change_verify',
+        data: payload,
+      );
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      debugPrint('OneAuth: Error verifying auth type change: ${e.message}');
+      throw OneAuthNetworkException(
+        e.message ?? 'Failed to verify auth type change',
+        statusCode: e.response?.statusCode,
+        originalError: e,
+      );
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> confirmAuthTypeChange({
+    required String sessionToken,
+    required String customerUniqueKey,
+    required String preferredAuthenticationType,
+    String? pinCode,
+    String? totpCode,
+    String? userResponse,
+  }) async {
+    await _ensureSecurity();
+    debugPrint('OneAuth: Confirming Auth Type Change to $preferredAuthenticationType...');
+    final payload = <String, dynamic>{
+      'sessionToken': sessionToken,
+      'customerUniqueKey': customerUniqueKey,
+      'preferredAuthenticationType': preferredAuthenticationType,
+      if (pinCode != null) 'pinCode': pinCode,
+      if (totpCode != null) 'totpCode': totpCode,
+      if (userResponse != null) 'userResponse': userResponse,
+    };
+
+    try {
+      final response = await _postWithFallback(
+        '/customer/auth-type/change_confirm',
+        data: payload,
+      );
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      debugPrint('OneAuth: Error confirming auth type change: ${e.message}');
+      throw OneAuthNetworkException(
+        e.message ?? 'Failed to confirm auth type change',
+        statusCode: e.response?.statusCode,
+        originalError: e,
+      );
+    }
+  }
+
+  @override
+  Future<void> startChangeAuthTypeFlow(
+    BuildContext context, {
+    required OneAuthUser user,
+    String? token,
+    VoidCallback? onSuccess,
+  }) async {
+    if (!_isInitialized) {
+      await initialize();
+    }
+    if (!context.mounted) return;
+    if (token != null && token.isNotEmpty) {
+      setUserToken(token);
+    }
+    final navigator = Navigator.of(context);
+
+    await navigator.push(
+      MaterialPageRoute(
+        builder: (_) => OneAuthChangeAuthTypeScreen(
+          user: user,
+          onComplete: () {
+            if (onSuccess != null) {
+              onSuccess();
+            } else if (context.mounted) {
+              OneAuthSnackBar.show(
+                context,
+                message: 'Authentication type updated successfully!',
+              );
+            }
+          },
+        ),
+      ),
+    );
+  }
 }
+
+
