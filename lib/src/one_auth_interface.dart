@@ -146,6 +146,19 @@ abstract class OneAuthInterface {
     String? totpCode,
     dynamic userResponse,
   });
+
+  /// Sends a push notification for auth type change.
+  Future<Map<String, dynamic>> sendAuthTypeNotification({
+    required String sessionToken,
+    required String customerUniqueKey,
+  });
+
+  /// Selects the new authentication type for the active session.
+  Future<Map<String, dynamic>> chooseAuthType({
+    required String sessionToken,
+    required String customerUniqueKey,
+    required String newAuthenticationType,
+  });
 }
 
 

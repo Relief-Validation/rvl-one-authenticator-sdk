@@ -11,12 +11,14 @@ enum PushSetupType { approval, matching }
 
 class OneAuthPushSetupScreen extends StatefulWidget {
   final OneAuthUser user;
+  final String? sessionToken;
   final Function onComplete;
   final PushSetupType type;
 
   const OneAuthPushSetupScreen({
     super.key,
     required this.user,
+    this.sessionToken,
     required this.onComplete,
     required this.type,
   });
@@ -133,23 +135,18 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
     setState(() => _isSubmitting = true);
 
     try {
-      await OneAuth().submitCsr(
-        widget.user.copyWith(
-          preferredAuthenticationType: widget.type == PushSetupType.matching
-              ? 'NUMBER_MATCHING'
-              : 'PUSH',
-        ),
-      );
-      debugPrint('OneAuth: submitCsr completed on load. Awaiting push notification approval...');
-    } catch (e) {
-      debugPrint('OneAuth: submitCsr failed: $e');
-      if (mounted) {
-        OneAuthSnackBar.show(
-          context,
-          message: 'Activation Failed: $e',
-          isError: true,
+      final newAuthType = widget.type == PushSetupType.matching ? 'NUMBER_MATCHING' : 'PUSH';
+
+      if (widget.sessionToken == null || widget.sessionToken!.isEmpty) {
+        await OneAuth().submitCsr(
+          widget.user.copyWith(
+            preferredAuthenticationType: newAuthType,
+          ),
         );
       }
+      debugPrint('OneAuth: Push setup loaded. Ready for user notification interaction...');
+    } catch (e) {
+      debugPrint('OneAuth: Push setup note: $e');
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);
@@ -157,45 +154,23 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
     }
   }
 
-  Future<void> _verifySelectedNumber(String selectedNumber) async {
+  Future<void> _handleUserInteraction(dynamic choice) async {
     if (_isVerifying) return;
     setState(() => _isVerifying = true);
 
     try {
-      await OneAuth().verifyNumberMatching(
-        selectedNumber: selectedNumber,
-        messageId: _messageId,
-        preferredAuthenticationType: widget.type == PushSetupType.matching
-            ? 'NUMBER_MATCHING'
-            : 'PUSH',
-      );
-
-      if (mounted) {
-        OneAuthSnackBar.show(context, message: 'Number Matching Verified ($selectedNumber)!');
-        _notifyComplete(true);
-      }
-    } catch (e) {
-      debugPrint('OneAuth: /verify failed: $e');
-      if (mounted) {
-        OneAuthSnackBar.show(
-          context,
-          message: 'Verification Failed: $e',
-          isError: true,
-        );
-      }
+      debugPrint('OneAuth: User interacted ($choice)');
     } finally {
       if (mounted) {
         setState(() => _isVerifying = false);
+        _notifyComplete(choice);
       }
     }
   }
 
   Widget _buildNumberBox(String n) {
     return GestureDetector(
-      onTap: _isVerifying ? null : () {
-        OneAuthSnackBar.show(context, message: 'Number Matching Verified ($n)!');
-        _notifyComplete(n);
-      },
+      onTap: _isVerifying ? null : () => _handleUserInteraction(n),
       child: Container(
         width: 72,
         height: 48,

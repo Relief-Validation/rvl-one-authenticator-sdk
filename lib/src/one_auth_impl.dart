@@ -1235,6 +1235,66 @@ class OneAuth implements OneAuthInterface {
   }
 
   @override
+  Future<Map<String, dynamic>> sendAuthTypeNotification({
+    required String sessionToken,
+    required String customerUniqueKey,
+  }) async {
+    await _ensureSecurity();
+    final path = _normalizePath('/customer/auth-type/send_notification');
+    debugPrint('OneAuth: Sending Auth Type Notification for session $sessionToken at path $path...');
+    final payload = <String, dynamic>{
+      'sessionToken': sessionToken,
+      'customerUniqueKey': customerUniqueKey,
+    };
+
+    try {
+      final response = await dioClient.dio.post(
+        path,
+        data: payload,
+      );
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      debugPrint('OneAuth: Error sending notification: ${e.message}');
+      throw OneAuthNetworkException(
+        e.message ?? 'Failed to send auth type notification',
+        statusCode: e.response?.statusCode,
+        originalError: e,
+      );
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> chooseAuthType({
+    required String sessionToken,
+    required String customerUniqueKey,
+    required String newAuthenticationType,
+  }) async {
+    await _ensureSecurity();
+    final path = _normalizePath('/customer/auth-type/choose_type');
+    debugPrint('OneAuth: Choosing Auth Type $newAuthenticationType for session $sessionToken at path $path...');
+    final payload = <String, dynamic>{
+      'sessionToken': sessionToken,
+      'customerUniqueKey': customerUniqueKey,
+      'newAuthenticationType': newAuthenticationType,
+    };
+
+    try {
+      final response = await dioClient.dio.post(
+        path,
+        data: payload,
+      );
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      debugPrint('OneAuth: Error in choose_type: ${e.message}');
+      throw OneAuthNetworkException(
+        e.message ?? 'Failed to choose auth type',
+        statusCode: e.response?.statusCode,
+        originalError: e,
+      );
+    }
+  }
+
+  @override
   Future<void> startChangeAuthTypeFlow(
     BuildContext context, {
     required OneAuthUser user,

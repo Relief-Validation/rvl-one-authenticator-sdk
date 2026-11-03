@@ -131,18 +131,22 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
     try {
       // Step 1: Verify current auth type if not already verified
       if (!_isCurrentVerified) {
+        debugPrint('OneAuth Step 1: Verifying current auth type ($_currentActiveModelCode) via /change_verify...');
         final verified = await _verifyCurrentAuthType();
         if (!verified) {
+          debugPrint('OneAuth Step 1 Failed: Verification of current auth type failed.');
           setState(() => _isSubmitting = false);
           return;
         }
         _isCurrentVerified = true;
+        debugPrint('OneAuth Step 1 Success: Current auth type verified successfully.');
       }
 
       // Step 2: Confirm new authentication type
+      debugPrint('OneAuth Step 2: Executing choose_type, send_notification, and change_confirm for $_selectedModelCode...');
       await _confirmNewAuthType();
     } catch (e) {
-      debugPrint('OneAuth: Error in auth type change flow: $e');
+      debugPrint('OneAuth Error in change flow: $e');
       if (mounted) {
         OneAuthSnackBar.show(
           context,
@@ -223,50 +227,42 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
         _sessionToken = res['sessionToken'];
       }
       return res['verified'] == true || res['status'] == 'VERIFIED';
-    } else if (currentType.contains('PUSH')) {
-      final String? approved = await Navigator.push<String>(
-        context,
-        MaterialPageRoute(
-          builder: (context) => OneAuthPushSetupScreen(
-            user: widget.user,
-            type: PushSetupType.approval,
-            onComplete: (res) {
-              Navigator.pop(context, res?.toString() ?? 'true');
-            },
-          ),
-        ),
-      );
-      if (approved != 'true') return false;
-
-      final res = await OneAuth().verifyAuthTypeChange(
-        sessionToken: _sessionToken ?? '',
-        customerUniqueKey: widget.user.id,
-        userResponse: 'true',
-      );
-
-      if (res['sessionToken'] != null) {
-        _sessionToken = res['sessionToken'];
+    } else if (currentType.contains('PUSH') || currentType.contains('NUMBER') || currentType.contains('MATCH')) {
+      try {
+        final notifRes = await OneAuth().sendAuthTypeNotification(
+          sessionToken: _sessionToken ?? '',
+          customerUniqueKey: widget.user.id,
+        );
+        if (notifRes['sessionToken'] != null) {
+          _sessionToken = notifRes['sessionToken'];
+        }
+      } catch (e) {
+        debugPrint('OneAuth: send_notification note: $e');
       }
-      return res['verified'] == true || res['status'] == 'VERIFIED';
-    } else if (currentType.contains('NUMBER') || currentType.contains('MATCH')) {
-      final String? selectedNum = await Navigator.push<String>(
+
+      if (!mounted) return false;
+
+      final isMatching = currentType.contains('NUMBER') || currentType.contains('MATCH');
+      final String? response = await Navigator.push<String>(
         context,
         MaterialPageRoute(
           builder: (context) => OneAuthPushSetupScreen(
             user: widget.user,
-            type: PushSetupType.matching,
+            sessionToken: _sessionToken,
+            type: isMatching ? PushSetupType.matching : PushSetupType.approval,
             onComplete: (res) {
               Navigator.pop(context, res?.toString());
             },
           ),
         ),
       );
-      if (selectedNum == null || selectedNum.isEmpty) return false;
+
+      if (response == null || response.isEmpty) return false;
 
       final res = await OneAuth().verifyAuthTypeChange(
         sessionToken: _sessionToken ?? '',
         customerUniqueKey: widget.user.id,
-        userResponse: selectedNum,
+        userResponse: response,
       );
 
       if (res['sessionToken'] != null) {
@@ -292,6 +288,22 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
     String? totpCode;
     String? userResponse;
 
+    // Step 1: Call choose_type API for the selected new authentication type
+    try {
+      debugPrint('OneAuth Step 2a: Calling /choose_type for $targetType...');
+      final chooseRes = await OneAuth().chooseAuthType(
+        sessionToken: _sessionToken ?? '',
+        customerUniqueKey: widget.user.id,
+        newAuthenticationType: _selectedModelCode!,
+      );
+      if (chooseRes['sessionToken'] != null && chooseRes['sessionToken'] is String) {
+        _sessionToken = chooseRes['sessionToken'] as String;
+      }
+    } catch (e) {
+      debugPrint('OneAuth: choose_type note: $e');
+    }
+
+    // Step 2: Collect new credential / activation response
     if (targetType == 'PIN') {
       pinCode = await _promptPinSetupModal(
         title: 'Set up your PIN',
@@ -299,7 +311,8 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
       );
       if (pinCode == null || pinCode.isEmpty) return;
     } else if (targetType == 'TOTP') {
-      debugPrint('OneAuth: Passing sessionToken $_sessionToken to OneAuthTotpSetupScreen for TOTP setup');
+      debugPrint('OneAuth Step 2c: Passing sessionToken $_sessionToken to OneAuthTotpSetupScreen for TOTP setup');
+      if (!mounted) return;
       final String? totp = await Navigator.push<String>(
         context,
         MaterialPageRoute(
@@ -332,37 +345,30 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
         return;
       }
       userResponse = 'true';
-    } else if (targetType.contains('PUSH')) {
+    } else if (targetType.contains('PUSH') || targetType.contains('NUMBER') || targetType.contains('MATCH')) {
+      if (!mounted) return;
+
+      final isMatching = targetType.contains('NUMBER') || targetType.contains('MATCH');
       final String? response = await Navigator.push<String>(
         context,
         MaterialPageRoute(
           builder: (context) => OneAuthPushSetupScreen(
             user: widget.user,
-            type: PushSetupType.approval,
-            onComplete: (res) {
-              Navigator.pop(context, res?.toString() ?? 'true');
-            },
-          ),
-        ),
-      );
-      if (response != 'true') return;
-      userResponse = 'true';
-    } else if (targetType.contains('NUMBER') || targetType.contains('MATCH')) {
-      final String? selectedNum = await Navigator.push<String>(
-        context,
-        MaterialPageRoute(
-          builder: (context) => OneAuthPushSetupScreen(
-            user: widget.user,
-            type: PushSetupType.matching,
+            sessionToken: _sessionToken,
+            type: isMatching ? PushSetupType.matching : PushSetupType.approval,
             onComplete: (res) {
               Navigator.pop(context, res?.toString());
             },
           ),
         ),
       );
-      if (selectedNum == null || selectedNum.isEmpty) return;
-      userResponse = selectedNum;
+
+      if (response == null || response.isEmpty) return;
+      userResponse = response;
     }
+
+    // Step 4: Call change_confirm API
+    debugPrint('OneAuth Step 2d: Calling /change_confirm for $targetType...');
 
     final res = await OneAuth().confirmAuthTypeChange(
       sessionToken: _sessionToken ?? '',
