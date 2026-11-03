@@ -37,8 +37,8 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
   @override
   void initState() {
     super.initState();
-    _currentActiveModelCode = widget.user.preferredAuthenticationType ?? 'PIN';
-    _selectedModelCode = _currentActiveModelCode;
+    _currentActiveModelCode = widget.user.preferredAuthenticationType;
+    _selectedModelCode = null; // No pre-selection
     _initializeFlow();
   }
 
@@ -58,9 +58,6 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
           if (res['currentAuthenticationType'] != null &&
               (res['currentAuthenticationType'] as String).isNotEmpty) {
             _currentActiveModelCode = res['currentAuthenticationType'];
-            if (_selectedModelCode == null || _selectedModelCode == widget.user.preferredAuthenticationType) {
-              _selectedModelCode = _currentActiveModelCode;
-            }
           }
           if (res['message'] != null) {
             _initiateMessage = res['message'];
@@ -83,9 +80,6 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
         if (mounted) {
           setState(() {
             _authTypes = fetchedTypes;
-            if (_selectedModelCode == null && _authTypes.isNotEmpty) {
-              _selectedModelCode = _authTypes.first.code;
-            }
             _isLoading = false;
           });
         }
@@ -109,6 +103,7 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
       case 'TOTP':
         return Icons.vpn_key_outlined;
       case 'PUSH':
+      case 'PUSH_NOTIFICATION':
         return Icons.notifications_active_outlined;
       case 'NUMBER_MATCHING':
         return Icons.dialpad;
@@ -161,12 +156,12 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
 
   /// Verification of Current Authentication Type
   Future<bool> _verifyCurrentAuthType() async {
-    final currentType = _currentActiveModelCode ?? 'PIN';
+    final currentType = (_currentActiveModelCode ?? 'PIN').toUpperCase();
 
     if (currentType == 'PIN') {
       final pin = await _promptPinModal(
         title: 'Verify Current PIN',
-        subtitle: 'Please enter your current PIN code to authorize this change.',
+        subtitle: 'Please enter your current 4-digit PIN code to authorize this change.',
       );
       if (pin == null || pin.isEmpty) return false;
 
@@ -190,6 +185,7 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
       final res = await OneAuth().verifyAuthTypeChange(
         sessionToken: _sessionToken ?? '',
         customerUniqueKey: widget.user.id,
+        userResponse: 'true',
       );
 
       if (res['sessionToken'] != null) {
@@ -213,8 +209,41 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
         _sessionToken = res['sessionToken'];
       }
       return res['verified'] == true || res['status'] == 'VERIFIED';
+    } else if (currentType.contains('PUSH')) {
+      final approved = await _promptPushModal(
+        title: 'Verify Push Notification',
+        subtitle: 'Tap Approve on the simulated push notification to verify your identity.',
+      );
+      if (approved != 'true') return false;
+
+      final res = await OneAuth().verifyAuthTypeChange(
+        sessionToken: _sessionToken ?? '',
+        customerUniqueKey: widget.user.id,
+        userResponse: 'true',
+      );
+
+      if (res['sessionToken'] != null) {
+        _sessionToken = res['sessionToken'];
+      }
+      return res['verified'] == true || res['status'] == 'VERIFIED';
+    } else if (currentType.contains('NUMBER') || currentType.contains('MATCH')) {
+      final selectedNum = await _promptNumberMatchingModal(
+        title: 'Verify Number Matching',
+        subtitle: 'Select the matching number to verify your current authentication method.',
+      );
+      if (selectedNum == null || selectedNum.isEmpty) return false;
+
+      final res = await OneAuth().verifyAuthTypeChange(
+        sessionToken: _sessionToken ?? '',
+        customerUniqueKey: widget.user.id,
+        userResponse: selectedNum,
+      );
+
+      if (res['sessionToken'] != null) {
+        _sessionToken = res['sessionToken'];
+      }
+      return res['verified'] == true || res['status'] == 'VERIFIED';
     } else {
-      // Default / Push / Number matching fallback verification
       final res = await OneAuth().verifyAuthTypeChange(
         sessionToken: _sessionToken ?? '',
         customerUniqueKey: widget.user.id,
@@ -228,14 +257,15 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
 
   /// Confirmation of New Authentication Type
   Future<void> _confirmNewAuthType() async {
-    final targetType = _selectedModelCode!;
+    final targetType = _selectedModelCode!.toUpperCase();
     String? pinCode;
     String? totpCode;
+    String? userResponse;
 
     if (targetType == 'PIN') {
-      pinCode = await _promptPinModal(
-        title: 'Set New PIN',
-        subtitle: 'Enter a 4-digit PIN for your new authentication method.',
+      pinCode = await _promptPinSetupModal(
+        title: 'Set up your PIN',
+        subtitle: 'Create a 4 Digit pin',
       );
       if (pinCode == null || pinCode.isEmpty) return;
     } else if (targetType == 'TOTP') {
@@ -259,20 +289,34 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
         }
         return;
       }
+      userResponse = 'true';
+    } else if (targetType.contains('PUSH')) {
+      userResponse = await _promptPushModal(
+        title: 'Activate Push Notification',
+        subtitle: 'Tap Approve on the push notification banner to activate Push Approval.',
+      );
+      if (userResponse != 'true') return;
+    } else if (targetType.contains('NUMBER') || targetType.contains('MATCH')) {
+      userResponse = await _promptNumberMatchingModal(
+        title: 'Activate Number Matching',
+        subtitle: 'Select the matching number to activate Number Matching challenge.',
+      );
+      if (userResponse == null || userResponse.isEmpty) return;
     }
 
     final res = await OneAuth().confirmAuthTypeChange(
       sessionToken: _sessionToken ?? '',
       customerUniqueKey: widget.user.id,
-      preferredAuthenticationType: targetType,
+      preferredAuthenticationType: _selectedModelCode!,
       pinCode: pinCode,
       totpCode: totpCode,
+      userResponse: userResponse,
     );
 
     if (mounted) {
       OneAuthSnackBar.show(
         context,
-        message: res['message'] ?? 'Authentication type updated to $targetType successfully!',
+        message: res['message'] ?? 'Authentication type updated to ${_selectedModelCode!} successfully!',
       );
 
       if (widget.onComplete != null) {
@@ -353,6 +397,163 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
     );
   }
 
+  /// PIN Setup Bottom Sheet Prompt (with Pin and Confirm Pin fields)
+  Future<String?> _promptPinSetupModal({required String title, required String subtitle}) {
+    final pinControllers = List.generate(4, (_) => TextEditingController());
+    final confirmPinControllers = List.generate(4, (_) => TextEditingController());
+    final pinFocusNodes = List.generate(4, (_) => FocusNode());
+    final confirmPinFocusNodes = List.generate(4, (_) => FocusNode());
+
+    return showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: OneAuthTheme.getBackgroundColor(context),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        String? errorMessage;
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            void handleSubmit() {
+              final pin = pinControllers.map((c) => c.text).join();
+              final confirmPin = confirmPinControllers.map((c) => c.text).join();
+
+              if (pin.length < 4 || confirmPin.length < 4) {
+                setModalState(() {
+                  errorMessage = 'Please enter a 4-digit PIN in both sections.';
+                });
+                return;
+              }
+
+              if (pin != confirmPin) {
+                setModalState(() {
+                  errorMessage = 'PINs do not match. Please try again.';
+                  for (var c in confirmPinControllers) {
+                    c.clear();
+                  }
+                });
+                confirmPinFocusNodes[0].requestFocus();
+                return;
+              }
+
+              Navigator.pop(context, pin);
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 24,
+                right: 24,
+                top: 24,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[400],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(title, style: OneAuthTheme.headingStyle(context)),
+                  const SizedBox(height: 8),
+                  Text(
+                    subtitle,
+                    textAlign: TextAlign.center,
+                    style: OneAuthTheme.subHeadingStyle(context),
+                  ),
+                  const SizedBox(height: 28),
+
+                  // Pin Section
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Pin',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: OneAuthTheme.getPrimaryTextColor(context),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  OneAuthPinInput(
+                    length: 4,
+                    controllers: pinControllers,
+                    focusNodes: pinFocusNodes,
+                    onChanged: (_) {
+                      if (errorMessage != null) {
+                        setModalState(() => errorMessage = null);
+                      }
+                    },
+                    onFieldSubmitted: (_, index) {
+                      if (index == 3) {
+                        confirmPinFocusNodes[0].requestFocus();
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Confirm Pin Section
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Confirm Pin',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: OneAuthTheme.getPrimaryTextColor(context),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  OneAuthPinInput(
+                    length: 4,
+                    controllers: confirmPinControllers,
+                    focusNodes: confirmPinFocusNodes,
+                    onChanged: (_) {
+                      if (errorMessage != null) {
+                        setModalState(() => errorMessage = null);
+                      }
+                    },
+                    onFieldSubmitted: (_, index) {
+                      if (index == 3) {
+                        handleSubmit();
+                      }
+                    },
+                  ),
+
+                  if (errorMessage != null) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      errorMessage!,
+                      style: const TextStyle(
+                        color: Colors.red,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+
+                  const SizedBox(height: 32),
+                  OneAuthPrimaryButton(
+                    label: 'Continue',
+                    onPressed: handleSubmit,
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   /// TOTP Modal Bottom Sheet Prompt
   Future<String?> _promptTotpModal({required String title, required String subtitle}) {
     final controllers = List.generate(6, (_) => TextEditingController());
@@ -417,6 +618,145 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
                   }
                 },
               ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Push Approval Bottom Sheet Prompt
+  Future<String?> _promptPushModal({required String title, required String subtitle}) {
+    return showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: OneAuthTheme.getBackgroundColor(context),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[400],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(title, style: OneAuthTheme.headingStyle(ctx)),
+              const SizedBox(height: 8),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: OneAuthTheme.subHeadingStyle(ctx),
+              ),
+              const SizedBox(height: 28),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: OneAuthTheme.isDarkMode(ctx) ? Colors.white10 : const Color(0xFFF0F5F9),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: OneAuthColors.primaryBlue, width: 1.5),
+                ),
+                child: Column(
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.security, color: OneAuthColors.primaryBlue),
+                        SizedBox(width: 8),
+                        Text('OneAuth Push Challenge', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Approve authentication request to proceed?'),
+                    const SizedBox(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        OutlinedButton(
+                          onPressed: () => Navigator.pop(ctx, 'false'),
+                          child: const Text('Deny', style: TextStyle(color: Colors.red)),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(ctx, 'true'),
+                          style: ElevatedButton.styleFrom(backgroundColor: OneAuthColors.primaryBlue),
+                          child: const Text('Approve', style: TextStyle(color: Colors.white)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Number Matching Bottom Sheet Prompt
+  Future<String?> _promptNumberMatchingModal({required String title, required String subtitle}) {
+    final choices = ['108', '042', '085'];
+    return showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: OneAuthTheme.getBackgroundColor(context),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[400],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(title, style: OneAuthTheme.headingStyle(ctx)),
+              const SizedBox(height: 8),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: OneAuthTheme.subHeadingStyle(ctx),
+              ),
+              const SizedBox(height: 28),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: choices.map((n) {
+                  return InkWell(
+                    onTap: () => Navigator.pop(ctx, n),
+                    child: Container(
+                      width: 72,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE8EEF5),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: OneAuthColors.primaryBlue, width: 1.5),
+                      ),
+                      child: Center(
+                        child: Text(
+                          n,
+                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 24),
             ],
           ),
         );

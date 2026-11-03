@@ -1112,35 +1112,27 @@ class OneAuth implements OneAuthInterface {
     );
   }
 
-  Future<Response> _getWithFallback(String path, {Map<String, dynamic>? queryParameters}) async {
-    try {
-      return await dioClient.dio.get(path, queryParameters: queryParameters);
-    } on DioException catch (e) {
-      if (e.response?.statusCode == 404 && !path.startsWith('/api/v1')) {
-        return await dioClient.dio.get('/api/v1$path', queryParameters: queryParameters);
-      }
-      rethrow;
-    }
-  }
+  String _normalizePath(String path) {
+    final baseUrl = dioClient.dio.options.baseUrl;
+    final baseHasApiV1 = baseUrl.endsWith('/api/v1') || baseUrl.endsWith('/api/v1/') || baseUrl.contains('/api/v1/');
+    final pathHasApiV1 = path.startsWith('/api/v1');
 
-  Future<Response> _postWithFallback(String path, {dynamic data}) async {
-    try {
-      return await dioClient.dio.post(path, data: data);
-    } on DioException catch (e) {
-      if (e.response?.statusCode == 404 && !path.startsWith('/api/v1')) {
-        return await dioClient.dio.post('/api/v1$path', data: data);
-      }
-      rethrow;
+    if (baseHasApiV1 && pathHasApiV1) {
+      return path.substring(7);
+    } else if (!baseHasApiV1 && !pathHasApiV1) {
+      return '/api/v1$path';
     }
+    return path;
   }
 
   @override
   Future<Map<String, dynamic>> initiateAuthTypeChange(String customerUniqueKey) async {
     await _ensureSecurity();
-    debugPrint('OneAuth: Initiating Auth Type Change for $customerUniqueKey...');
+    final path = _normalizePath('/customer/auth-type/change');
+    debugPrint('OneAuth: Initiating Auth Type Change for $customerUniqueKey at path $path...');
     try {
-      final response = await _getWithFallback(
-        '/customer/auth-type/change',
+      final response = await dioClient.dio.get(
+        path,
         queryParameters: {'customerUniqueKey': customerUniqueKey},
       );
       return Map<String, dynamic>.from(response.data);
@@ -1154,27 +1146,41 @@ class OneAuth implements OneAuthInterface {
     }
   }
 
+  dynamic _formatUserResponse(dynamic val) {
+    if (val == null) return null;
+    if (val is bool) return val;
+    if (val is String) {
+      final lower = val.trim().toLowerCase();
+      if (lower == 'true') return true;
+      if (lower == 'false') return false;
+    }
+    return val;
+  }
+
   @override
   Future<Map<String, dynamic>> verifyAuthTypeChange({
     required String sessionToken,
     required String customerUniqueKey,
     String? pinCode,
     String? totpCode,
-    String? userResponse,
+    dynamic userResponse,
   }) async {
     await _ensureSecurity();
-    debugPrint('OneAuth: Verifying Auth Type Change for session $sessionToken...');
+    final path = _normalizePath('/customer/auth-type/change_verify');
+    final formattedUserResp = _formatUserResponse(userResponse);
+    debugPrint('OneAuth: Verifying Auth Type Change at $path for session $sessionToken (userResponse: $formattedUserResp)...');
+    
     final payload = <String, dynamic>{
       'sessionToken': sessionToken,
       'customerUniqueKey': customerUniqueKey,
       if (pinCode != null) 'pinCode': pinCode,
       if (totpCode != null) 'totpCode': totpCode,
-      if (userResponse != null) 'userResponse': userResponse,
+      if (formattedUserResp != null) 'userResponse': formattedUserResp,
     };
 
     try {
-      final response = await _postWithFallback(
-        '/customer/auth-type/change_verify',
+      final response = await dioClient.dio.post(
+        path,
         data: payload,
       );
       return Map<String, dynamic>.from(response.data);
@@ -1195,22 +1201,25 @@ class OneAuth implements OneAuthInterface {
     required String preferredAuthenticationType,
     String? pinCode,
     String? totpCode,
-    String? userResponse,
+    dynamic userResponse,
   }) async {
     await _ensureSecurity();
-    debugPrint('OneAuth: Confirming Auth Type Change to $preferredAuthenticationType...');
+    final path = _normalizePath('/customer/auth-type/change_confirm');
+    final formattedUserResp = _formatUserResponse(userResponse);
+    debugPrint('OneAuth: Confirming Auth Type Change at $path to $preferredAuthenticationType (userResponse: $formattedUserResp)...');
+    
     final payload = <String, dynamic>{
       'sessionToken': sessionToken,
       'customerUniqueKey': customerUniqueKey,
       'preferredAuthenticationType': preferredAuthenticationType,
       if (pinCode != null) 'pinCode': pinCode,
       if (totpCode != null) 'totpCode': totpCode,
-      if (userResponse != null) 'userResponse': userResponse,
+      if (formattedUserResp != null) 'userResponse': formattedUserResp,
     };
 
     try {
-      final response = await _postWithFallback(
-        '/customer/auth-type/change_confirm',
+      final response = await dioClient.dio.post(
+        path,
         data: payload,
       );
       return Map<String, dynamic>.from(response.data);
@@ -1245,6 +1254,9 @@ class OneAuth implements OneAuthInterface {
         builder: (_) => OneAuthChangeAuthTypeScreen(
           user: user,
           onComplete: () {
+            if (navigator.canPop()) {
+              navigator.pop();
+            }
             if (onSuccess != null) {
               onSuccess();
             } else if (context.mounted) {

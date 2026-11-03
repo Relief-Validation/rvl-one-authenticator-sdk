@@ -134,7 +134,7 @@ abstract class OneAuthInterface {
     required String customerUniqueKey,
     String? pinCode,
     String? totpCode,
-    String? userResponse,
+    dynamic userResponse,
   });
 
   /// Confirms and completes the preferred authentication type change.
@@ -144,7 +144,7 @@ abstract class OneAuthInterface {
     required String preferredAuthenticationType,
     String? pinCode,
     String? totpCode,
-    String? userResponse,
+    dynamic userResponse,
   });
 }
 

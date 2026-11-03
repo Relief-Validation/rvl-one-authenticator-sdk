@@ -39,6 +39,7 @@ class DioClient {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'Authorization' : 'Bearer eyJraWQiOiJydmwtb25lLWF1dGhlbnRpY2F0b3Itand0LWtleSIsImFsZyI6IlJTMjU2In0.eyJhcHBfcGFja2FnZV9pZCI6ImNvbS5kaGFrYWJhbmsuYXBwIiwic3ViIjoiMjVhNWNmYzUtZTBkZi00YjlmLTg0MWMtMWY5Njg5NmM5NDQ3Iiwic2NvcGUiOiJzZGs6dXNlIiwiaXNzIjoib25lLWF1dGhlbnRpY2F0b3IiLCJjbGllbnRfdXVpZCI6IjI1YTVjZmM1LWUwZGYtNGI5Zi04NDFjLTFmOTY4OTZjOTQ0NyIsImNsaWVudF90eXBlIjoiQkFOSyIsImV4cCI6NDk0NzI3OTM3MiwiaWF0IjoxNzkzNjc5MzcyLCJjbGllbnRfaWQiOiI5NTdkNWJkZDBlM2U0Mjc5In0.dGfjg5QtuB5NYzuZuJtsbvk_cBQvoZu29PgxTO_FJAFiRUOBF_hXfdsi0QTD6AYhrW5IwSedda-23bhKSR7HtoDdivBZU0eBOVjsne7DUBB3QFsUlSBqYQyfuSMDgVGTWSl_c9tRefP_IGP2eU-TYRdbRQ3d6FGXQL4bNleClI8UEp9hmmQyXCGrEbwAJJvv_Xu3mZQ-e82w59sB36T_Er-qOauk6xc0O0rEdPmThBG6nGaTWmBR0w-dPd8VW05_yKWv4v9cG9JPRigMfDb36RgS1ftGDGlK2A-rcxypdHUpgYxPZPP8jLPtV1EZc0DfRjusr5o8DduS_Sp0gaQglA'
         },
       ),
     );
@@ -48,7 +49,7 @@ class DioClient {
     dio.interceptors.add(AuthInterceptor(
       apiKey: apiKey,
       getClientToken: getClientToken,
-      getUserToken: getUserToken,
+      // getUserToken: getUserToken,
       getAuthenticatorUserId: getAuthenticatorUserId,
       onSecurityCheck: onSecurityCheck,
       onRefreshToken: onRefreshToken,
