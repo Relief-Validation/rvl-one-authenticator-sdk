@@ -336,6 +336,7 @@ class OneAuth implements OneAuthInterface {
   @override
   Future<void> setTotpSecret(String userId, String secret) async {
     _ensureInitialized();
+    debugPrint('OneAuth: Saving TOTP secret for userId $userId: $secret');
     await _secureStorage.write(key: 'totp_secret_$userId', value: secret);
   }
 

@@ -8,6 +8,8 @@ import '../../widgets/snack_bar.dart';
 import '../../one_auth_impl.dart';
 import '../../models/authentication_type.dart';
 import '../../models/user.dart';
+import '../totp/totp_setup_screen.dart';
+import '../push/push_setup_screen.dart';
 
 class OneAuthChangeAuthTypeScreen extends StatefulWidget {
   final OneAuthUser user;
@@ -55,6 +57,7 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
       if (mounted) {
         setState(() {
           _sessionToken = res['sessionToken'];
+          debugPrint('OneAuth: /auth-type/change returned sessionToken: $_sessionToken');
           if (res['currentAuthenticationType'] != null &&
               (res['currentAuthenticationType'] as String).isNotEmpty) {
             _currentActiveModelCode = res['currentAuthenticationType'];
@@ -193,9 +196,20 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
       }
       return res['verified'] == true || res['status'] == 'VERIFIED';
     } else if (currentType == 'TOTP') {
-      final totp = await _promptTotpModal(
-        title: 'Verify Authenticator Code',
-        subtitle: 'Enter the 6-digit TOTP code from your authenticator app.',
+      final String? totp = await Navigator.push<String>(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OneAuthTotpSetupScreen(
+            user: widget.user,
+            sessionToken: _sessionToken,
+            isVerification: true,
+            title: 'Verify Authenticator Code',
+            subtitle: 'Enter the 6-digit TOTP code from your authenticator app to authorize this change.',
+            onCompleteCode: (code) {
+              Navigator.pop(context, code);
+            },
+          ),
+        ),
       );
       if (totp == null || totp.isEmpty) return false;
 
@@ -210,9 +224,17 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
       }
       return res['verified'] == true || res['status'] == 'VERIFIED';
     } else if (currentType.contains('PUSH')) {
-      final approved = await _promptPushModal(
-        title: 'Verify Push Notification',
-        subtitle: 'Tap Approve on the simulated push notification to verify your identity.',
+      final String? approved = await Navigator.push<String>(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OneAuthPushSetupScreen(
+            user: widget.user,
+            type: PushSetupType.approval,
+            onComplete: (res) {
+              Navigator.pop(context, res?.toString() ?? 'true');
+            },
+          ),
+        ),
       );
       if (approved != 'true') return false;
 
@@ -227,9 +249,17 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
       }
       return res['verified'] == true || res['status'] == 'VERIFIED';
     } else if (currentType.contains('NUMBER') || currentType.contains('MATCH')) {
-      final selectedNum = await _promptNumberMatchingModal(
-        title: 'Verify Number Matching',
-        subtitle: 'Select the matching number to verify your current authentication method.',
+      final String? selectedNum = await Navigator.push<String>(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OneAuthPushSetupScreen(
+            user: widget.user,
+            type: PushSetupType.matching,
+            onComplete: (res) {
+              Navigator.pop(context, res?.toString());
+            },
+          ),
+        ),
       );
       if (selectedNum == null || selectedNum.isEmpty) return false;
 
@@ -269,11 +299,23 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
       );
       if (pinCode == null || pinCode.isEmpty) return;
     } else if (targetType == 'TOTP') {
-      totpCode = await _promptTotpModal(
-        title: 'Confirm TOTP Code',
-        subtitle: 'Enter the 6-digit code to verify your new TOTP authenticator setup.',
+      debugPrint('OneAuth: Passing sessionToken $_sessionToken to OneAuthTotpSetupScreen for TOTP setup');
+      final String? totp = await Navigator.push<String>(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OneAuthTotpSetupScreen(
+            user: widget.user,
+            sessionToken: _sessionToken,
+            title: 'Set Up TOTP Authenticator',
+            subtitle: 'Enter the 6-digit TOTP code from your authenticator app to activate TOTP.',
+            onCompleteCode: (code) {
+              Navigator.pop(context, code);
+            },
+          ),
+        ),
       );
-      if (totpCode == null || totpCode.isEmpty) return;
+      if (totp == null || totp.isEmpty) return;
+      totpCode = totp;
     } else if (targetType == 'BIOMETRIC') {
       final authenticated = await _localAuth.authenticate(
         localizedReason: 'Please authenticate to activate biometric verification for OneAuth',
@@ -291,17 +333,35 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
       }
       userResponse = 'true';
     } else if (targetType.contains('PUSH')) {
-      userResponse = await _promptPushModal(
-        title: 'Activate Push Notification',
-        subtitle: 'Tap Approve on the push notification banner to activate Push Approval.',
+      final String? response = await Navigator.push<String>(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OneAuthPushSetupScreen(
+            user: widget.user,
+            type: PushSetupType.approval,
+            onComplete: (res) {
+              Navigator.pop(context, res?.toString() ?? 'true');
+            },
+          ),
+        ),
       );
-      if (userResponse != 'true') return;
+      if (response != 'true') return;
+      userResponse = 'true';
     } else if (targetType.contains('NUMBER') || targetType.contains('MATCH')) {
-      userResponse = await _promptNumberMatchingModal(
-        title: 'Activate Number Matching',
-        subtitle: 'Select the matching number to activate Number Matching challenge.',
+      final String? selectedNum = await Navigator.push<String>(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OneAuthPushSetupScreen(
+            user: widget.user,
+            type: PushSetupType.matching,
+            onComplete: (res) {
+              Navigator.pop(context, res?.toString());
+            },
+          ),
+        ),
       );
-      if (userResponse == null || userResponse.isEmpty) return;
+      if (selectedNum == null || selectedNum.isEmpty) return;
+      userResponse = selectedNum;
     }
 
     final res = await OneAuth().confirmAuthTypeChange(
@@ -549,216 +609,6 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
               ),
             );
           },
-        );
-      },
-    );
-  }
-
-  /// TOTP Modal Bottom Sheet Prompt
-  Future<String?> _promptTotpModal({required String title, required String subtitle}) {
-    final controllers = List.generate(6, (_) => TextEditingController());
-    final focusNodes = List.generate(6, (_) => FocusNode());
-    String currentCode = '';
-
-    return showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: OneAuthTheme.getBackgroundColor(context),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 24,
-            right: 24,
-            top: 24,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[400],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(title, style: OneAuthTheme.headingStyle(ctx)),
-              const SizedBox(height: 8),
-              Text(
-                subtitle,
-                textAlign: TextAlign.center,
-                style: OneAuthTheme.subHeadingStyle(ctx),
-              ),
-              const SizedBox(height: 28),
-              OneAuthPinInput(
-                length: 6,
-                controllers: controllers,
-                focusNodes: focusNodes,
-                obscureText: false,
-                onChanged: (val) => currentCode = val,
-                onFieldSubmitted: (val, _) {
-                  if (val.length == 6) {
-                    Navigator.pop(ctx, val);
-                  }
-                },
-              ),
-              const SizedBox(height: 32),
-              OneAuthPrimaryButton(
-                label: 'Confirm',
-                onPressed: () {
-                  if (currentCode.length == 6) {
-                    Navigator.pop(ctx, currentCode);
-                  } else {
-                    OneAuthSnackBar.show(ctx, message: 'Please enter a valid 6-digit code', isError: true);
-                  }
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  /// Push Approval Bottom Sheet Prompt
-  Future<String?> _promptPushModal({required String title, required String subtitle}) {
-    return showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: OneAuthTheme.getBackgroundColor(context),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[400],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(title, style: OneAuthTheme.headingStyle(ctx)),
-              const SizedBox(height: 8),
-              Text(
-                subtitle,
-                textAlign: TextAlign.center,
-                style: OneAuthTheme.subHeadingStyle(ctx),
-              ),
-              const SizedBox(height: 28),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: OneAuthTheme.isDarkMode(ctx) ? Colors.white10 : const Color(0xFFF0F5F9),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: OneAuthColors.primaryBlue, width: 1.5),
-                ),
-                child: Column(
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.security, color: OneAuthColors.primaryBlue),
-                        SizedBox(width: 8),
-                        Text('OneAuth Push Challenge', style: TextStyle(fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    const Text('Approve authentication request to proceed?'),
-                    const SizedBox(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        OutlinedButton(
-                          onPressed: () => Navigator.pop(ctx, 'false'),
-                          child: const Text('Deny', style: TextStyle(color: Colors.red)),
-                        ),
-                        ElevatedButton(
-                          onPressed: () => Navigator.pop(ctx, 'true'),
-                          style: ElevatedButton.styleFrom(backgroundColor: OneAuthColors.primaryBlue),
-                          child: const Text('Approve', style: TextStyle(color: Colors.white)),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  /// Number Matching Bottom Sheet Prompt
-  Future<String?> _promptNumberMatchingModal({required String title, required String subtitle}) {
-    final choices = ['108', '042', '085'];
-    return showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: OneAuthTheme.getBackgroundColor(context),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[400],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(title, style: OneAuthTheme.headingStyle(ctx)),
-              const SizedBox(height: 8),
-              Text(
-                subtitle,
-                textAlign: TextAlign.center,
-                style: OneAuthTheme.subHeadingStyle(ctx),
-              ),
-              const SizedBox(height: 28),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: choices.map((n) {
-                  return InkWell(
-                    onTap: () => Navigator.pop(ctx, n),
-                    child: Container(
-                      width: 72,
-                      height: 52,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE8EEF5),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: OneAuthColors.primaryBlue, width: 1.5),
-                      ),
-                      child: Center(
-                        child: Text(
-                          n,
-                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 24),
-            ],
-          ),
         );
       },
     );

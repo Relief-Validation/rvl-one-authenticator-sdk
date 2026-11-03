@@ -35,14 +35,23 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
   List<String> _numberChoices = ['108', '042', '085'];
   StreamSubscription? _pushSubscription;
 
-  void _notifyComplete(bool success) {
+  void _notifyComplete(dynamic result) {
     final callback = widget.onComplete;
-    if (callback is void Function(bool)) {
-      callback(success);
+    if (callback is void Function(dynamic)) {
+      callback(result);
+    } else if (callback is void Function(bool)) {
+      final boolVal = result == true || result == 'true';
+      callback(boolVal);
     } else if (callback is void Function()) {
       callback();
     } else {
-      Function.apply(callback, [success]);
+      try {
+        Function.apply(callback, [result]);
+      } catch (_) {
+        if (callback is void Function()) {
+          callback();
+        }
+      }
     }
   }
 
@@ -183,7 +192,10 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
 
   Widget _buildNumberBox(String n) {
     return GestureDetector(
-      onTap: _isVerifying ? null : () => _verifySelectedNumber(n),
+      onTap: _isVerifying ? null : () {
+        OneAuthSnackBar.show(context, message: 'Number Matching Verified ($n)!');
+        _notifyComplete(n);
+      },
       child: Container(
         width: 72,
         height: 48,
@@ -356,34 +368,46 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
                                       Row(
                                         mainAxisAlignment: MainAxisAlignment.end,
                                         children: [
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: Colors.grey[200],
-                                              borderRadius: BorderRadius.circular(6),
-                                            ),
-                                            child: const Text(
-                                              'NO',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.redAccent,
+                                          GestureDetector(
+                                            onTap: () {
+                                              OneAuthSnackBar.show(context, message: 'Push Approval Denied.', isError: true);
+                                              _notifyComplete('false');
+                                            },
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey[200],
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: const Text(
+                                                'NO',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.redAccent,
+                                                ),
                                               ),
                                             ),
                                           ),
                                           const SizedBox(width: 8),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: OneAuthColors.primaryBlue,
-                                              borderRadius: BorderRadius.circular(6),
-                                            ),
-                                            child: const Text(
-                                              'YES',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.white,
+                                          GestureDetector(
+                                            onTap: () {
+                                              OneAuthSnackBar.show(context, message: 'Push Approval Verified!');
+                                              _notifyComplete('true');
+                                            },
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: OneAuthColors.primaryBlue,
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: const Text(
+                                                'YES',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.white,
+                                                ),
                                               ),
                                             ),
                                           ),

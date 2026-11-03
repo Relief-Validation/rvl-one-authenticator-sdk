@@ -49,7 +49,7 @@ class DioClient {
     dio.interceptors.add(AuthInterceptor(
       apiKey: apiKey,
       getClientToken: getClientToken,
-      // getUserToken: getUserToken,
+      // getUserToken: getUserToken, // Todo: need to enable when 'Authorization' commented
       getAuthenticatorUserId: getAuthenticatorUserId,
       onSecurityCheck: onSecurityCheck,
       onRefreshToken: onRefreshToken,

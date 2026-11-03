@@ -12,13 +12,23 @@ import '../../one_auth_impl.dart';
 class OneAuthTotpSetupScreen extends StatefulWidget {
   final OneAuthUser user;
   final String? csrPem;
-  final VoidCallback onComplete;
+  final String? sessionToken;
+  final bool isVerification;
+  final String title;
+  final String subtitle;
+  final Function? onComplete;
+  final Function(String code)? onCompleteCode;
 
   const OneAuthTotpSetupScreen({
     super.key,
     required this.user,
     this.csrPem,
-    required this.onComplete,
+    this.sessionToken,
+    this.isVerification = false,
+    this.title = 'TOTP Verification',
+    this.subtitle = 'Enter the 6-digit code from your authenticator app to link your account.',
+    this.onComplete,
+    this.onCompleteCode,
   });
 
   @override
@@ -52,7 +62,14 @@ class _OneAuthTotpSetupScreenState extends State<OneAuthTotpSetupScreen> {
 
   void _notifyComplete() {
     try {
-      widget.onComplete();
+      final callback = widget.onComplete;
+      if (callback != null) {
+        if (callback is void Function()) {
+          callback();
+        } else {
+          Function.apply(callback, []);
+        }
+      }
     } catch (e) {
       debugPrint('OneAuth TOTP: Error executing onComplete callback: $e');
     }
@@ -63,11 +80,25 @@ class _OneAuthTotpSetupScreenState extends State<OneAuthTotpSetupScreen> {
       if (!mounted) return;
 
       try {
-        String? secret = await OneAuth().getTotpSecret(widget.user.id);
+        String? secret;
+
+        // 1. If verifying current TOTP, use existing stored secret from _secureStorage.read(key: 'totp_secret_$userId')
+        if (widget.isVerification) {
+          secret = await OneAuth().getTotpSecret(widget.user.id);
+          debugPrint('OneAuth TOTP: Verifying current TOTP using stored secret for userId ${widget.user.id}: $secret');
+        } else if (widget.sessionToken != null && widget.sessionToken!.isNotEmpty) {
+          // 2. If setting a new TOTP, use sessionToken directly as the new secret and save it
+          secret = widget.sessionToken!;
+          await OneAuth().setTotpSecret(widget.user.id, secret);
+          debugPrint('OneAuth TOTP: Setting new TOTP secret using sessionToken for userId ${widget.user.id}: $secret');
+        } else {
+          secret = await OneAuth().getTotpSecret(widget.user.id);
+          debugPrint('OneAuth TOTP: Retrieved existing secret for userId ${widget.user.id}: $secret');
+        }
 
         if (secret == null || secret.isEmpty) {
           try {
-            // 1. Derivation from enrollment Nonce
+            // 2. Fallback derivation from enrollment Nonce
             final nonceData = await OneAuth().getEnrollmentNonce(widget.user.id);
             final nonceBase64 = nonceData['nonceBase64'] ??
                 nonceData['data']?['nonceBase64'] ??
@@ -76,13 +107,11 @@ class _OneAuthTotpSetupScreenState extends State<OneAuthTotpSetupScreen> {
 
             if (nonceBase64 != null && nonceBase64 is String && nonceBase64.isNotEmpty) {
               secret = OneAuthTotpGenerator.generateSecretFromNonce(nonceBase64);
+              await OneAuth().setTotpSecret(widget.user.id, secret);
+              debugPrint('OneAuth TOTP: Derived and saved fallback TOTP secret for userId ${widget.user.id}: $secret');
             }
           } catch (e) {
             debugPrint('OneAuth: Error fetching nonce for secret derivation: $e');
-          }
-
-          if (secret != null && secret.isNotEmpty) {
-            await OneAuth().setTotpSecret(widget.user.id, secret);
           }
         }
 
@@ -147,6 +176,11 @@ class _OneAuthTotpSetupScreenState extends State<OneAuthTotpSetupScreen> {
       return;
     }
 
+    if (widget.onCompleteCode != null) {
+      widget.onCompleteCode!(code);
+      return;
+    }
+
     setState(() {
       _isVerifying = true;
       _errorMessage = null;
@@ -201,12 +235,12 @@ class _OneAuthTotpSetupScreenState extends State<OneAuthTotpSetupScreen> {
                     child: Column(
                       children: [
                         Text(
-                          'TOTP Verification',
+                          widget.title,
                           style: OneAuthTheme.headingStyle(context),
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          'Enter the 6-digit code from your authenticator app to link your account.',
+                          widget.subtitle,
                           textAlign: TextAlign.center,
                           style: OneAuthTheme.subHeadingStyle(context),
                         ),
