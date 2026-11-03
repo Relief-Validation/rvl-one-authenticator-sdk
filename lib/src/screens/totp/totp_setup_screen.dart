@@ -97,25 +97,6 @@ class _OneAuthTotpSetupScreenState extends State<OneAuthTotpSetupScreen> {
         }
 
         if (secret == null || secret.isEmpty) {
-          try {
-            // 2. Fallback derivation from enrollment Nonce
-            final nonceData = await OneAuth().getEnrollmentNonce(widget.user.id);
-            final nonceBase64 = nonceData['nonceBase64'] ??
-                nonceData['data']?['nonceBase64'] ??
-                nonceData['nonce_base64'] ??
-                nonceData['nonce'];
-
-            if (nonceBase64 != null && nonceBase64 is String && nonceBase64.isNotEmpty) {
-              secret = OneAuthTotpGenerator.generateSecretFromNonce(nonceBase64);
-              await OneAuth().setTotpSecret(widget.user.id, secret);
-              debugPrint('OneAuth TOTP: Derived and saved fallback TOTP secret for userId ${widget.user.id}: $secret');
-            }
-          } catch (e) {
-            debugPrint('OneAuth: Error fetching nonce for secret derivation: $e');
-          }
-        }
-
-        if (secret == null || secret.isEmpty) {
           debugPrint('OneAuth: Unable to obtain secret to generate TOTP code.');
           return;
         }
