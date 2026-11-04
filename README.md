@@ -15,6 +15,7 @@ Unified authentication and identity SDK for mobile applications, providing a sec
 ## Features
 
 - **Ready-to-Use MFA Flows**: High-level orchestration via `startEnrollmentFlow` and `verifyTransaction`.
+- **Change Authentication Type Flow**: High-level orchestration via `startChangeAuthTypeFlow` to switch preferred MFA methods (PIN, Biometrics, TOTP, Push) with active enrollment validation.
 - **Transaction Hash Service**: Built-in canonical JSON serialization and SHA-256 computation (`TransactionHashService`).
 - **Hardware Transaction Signing**: Signs transaction challenge hashes with hardware-backed private keys in the TEE/Secure Enclave.
 - **Runtime Threat Detection**: Proactive monitoring for Root/Jailbreak, Emulators, and Hooking (Frida) via **freeRASP**.
@@ -44,7 +45,7 @@ dependencies:
    one_auth:
       git:
          url: https://github.com/Relief-Validation/rvl-one-authenticator-sdk.git
-         ref: v0.8.0
+         ref: v0.9.0
 ```
 
 ### Via Local Path (Monorepo)
@@ -220,6 +221,68 @@ isError: true,
 - Capture `Navigator.of(context)` *before* the first `await` so the loading dialog can be closed safely afterwards.
 - Always check `mounted` / `context.mounted` after every `await` before touching `context`.
 - Close the loading dialog in both the success and the error path.
+
+---
+
+## Change Authentication Type Flow (`startChangeAuthTypeFlow`)
+
+Users can change their preferred authentication method (PIN, Biometrics, TOTP, or Push Notification) at any time. The SDK ensures the user's enrollment is active, initiates a secure change session, guides the user through verification of their current auth credential, and confirms the new selection.
+
+### Example
+
+```dart
+onTap: () async {
+  if (user == null) return;
+  final navigator = Navigator.of(context);
+
+  // 1. Show loading dialog while fetching client token
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const Center(child: CircularProgressIndicator()),
+  );
+
+  try {
+    final token = await AuthService().getClientToken();
+
+    if (!mounted || !context.mounted) return;
+    navigator.pop(); // Close loading dialog
+
+    // 2. Map app user to OneAuthUser
+    final oneAuthUser = OneAuthUser(
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      nid: user.nid,
+      accountNumber: user.accountNumber,
+      dob: user.dob,
+      preferredAuthenticationType: user.preferredAuthenticationType,
+    );
+
+    // 3. Launch Change Auth Type flow
+    await OneAuth().startChangeAuthTypeFlow(
+      context,
+      user: oneAuthUser,
+      token: token,
+      onSuccess: () {
+        OneAuthSnackBar.show(
+          context,
+          message: 'Authentication type updated successfully!',
+        );
+      },
+    );
+  } catch (e) {
+    if (!mounted || !context.mounted) return;
+    navigator.pop();
+    OneAuthSnackBar.show(
+      context,
+      message: 'Failed to change auth type: $e',
+      isError: true,
+    );
+  }
+},
+```
 
 ---
 

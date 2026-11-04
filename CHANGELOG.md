@@ -1,3 +1,11 @@
+## 0.9.0
+
+* Added Change Authentication Type feature (`startChangeAuthTypeFlow`).
+* Added `OneAuthChangeAuthTypeScreen` supporting switches between PIN, Biometrics, TOTP, and Push notification with number matching.
+* Added backend session APIs: `initiateAuthTypeChange`, `chooseAuthType`, `sendAuthTypeNotification`, `verifyAuthTypeChange`, and `confirmAuthTypeChange`.
+* Added active status validation (`OneAuth is not Active`) before allowing authentication type change.
+* Refactored screen exports into modular `screens.dart`.
+
 ## 0.8.0
 
 * Public IP added.
