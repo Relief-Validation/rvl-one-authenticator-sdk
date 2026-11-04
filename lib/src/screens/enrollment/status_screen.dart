@@ -187,14 +187,14 @@ class _OneAuthStatusScreenState extends State<OneAuthStatusScreen> with SingleTi
             child: isCompleted
                 ? const Icon(Icons.check, size: 18, color: Colors.white)
                 : Text(
-                    '$step',
-                    style: TextStyle(
-                      color: isActive
-                          ? (isDark ? Colors.white : Colors.black)
-                          : Colors.grey,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+              '$step',
+              style: TextStyle(
+                color: isActive
+                    ? (isDark ? Colors.white : Colors.black)
+                    : Colors.grey,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ),
         const SizedBox(width: 16),

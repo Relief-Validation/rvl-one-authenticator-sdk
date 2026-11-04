@@ -60,6 +60,10 @@ class AuthInterceptor extends Interceptor {
       options.headers['X-API-KEY'] = apiKey;
     }
 
+    if (!options.headers.containsKey('X-DEVICE-SIGNATURE')) {
+      options.headers['X-DEVICE-SIGNATURE'] = '';
+    }
+
     final clientToken = getClientToken != null ? await getClientToken!() : null;
     final userToken = getUserToken != null ? await getUserToken!() : null;
     final authenticatorUserId = getAuthenticatorUserId != null ? await getAuthenticatorUserId!() : null;

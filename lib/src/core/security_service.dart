@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:freerasp/freerasp.dart';
+import 'platform/crypto_platform.dart';
 
 /// Represents a security threat detected on the device.
 class SecurityThreatEvent {
@@ -91,22 +92,12 @@ class SecurityService with ChangeNotifier {
   /// Whether security monitoring is initialized and running.
   bool get isInitialized => _isInitialized;
 
-  static const MethodChannel _securityChannel = MethodChannel('com.example.one_auth/crypto');
+  /// Optional callback invoked when a critical threat is detected to wipe credentials.
+  VoidCallback? onSecurityWipe;
 
   /// Dynamically retrieves the active app's Base64 SHA-256 signing certificate hash.
   static Future<String?> getAppSigningHash() async {
-    try {
-      if (defaultTargetPlatform == TargetPlatform.android) {
-        final String? hash = await _securityChannel.invokeMethod<String>('getAppSigningHash');
-        if (hash != null && hash.isNotEmpty) {
-          debugPrint('SecurityService: Dynamically resolved active signing hash -> $hash');
-          return hash;
-        }
-      }
-    } catch (e) {
-      debugPrint('SecurityService: Dynamic signing hash lookup note: $e');
-    }
-    return null;
+    return OneAuthCryptoPlatform.instance.getAppSigningHash();
   }
 
   /// Initializes freeRASP security monitoring and attaches threat listeners.
@@ -181,6 +172,12 @@ class SecurityService with ChangeNotifier {
     );
 
     debugPrint('SecurityService [THREAT DETECTED]: $type - $message');
+
+    // Trigger security wipe for critical threats in release mode or when forced
+    if (type == 'Root/Jailbreak' || type == 'App Tampering' || type == 'Hooking Framework') {
+      debugPrint('SecurityService: Critical security violation ($type). Triggering proactive security wipe.');
+      onSecurityWipe?.call();
+    }
 
     // Push threat data to broadcast stream
     _threatStreamController.add(event);

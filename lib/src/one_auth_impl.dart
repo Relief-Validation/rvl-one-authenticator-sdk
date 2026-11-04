@@ -1126,6 +1126,33 @@ class OneAuth implements OneAuthInterface {
     return path;
   }
 
+  Future<Options> _getDeviceSignatureOptions([String? sessionToken]) async {
+    String signature = '';
+    if (sessionToken != null && sessionToken.isNotEmpty) {
+      try {
+        final result = await _cryptoChannel.invokeMethod<String>('signTransactionHash', sessionToken);
+        if (result != null && result.isNotEmpty) {
+          signature = result;
+          debugPrint('OneAuth: Signed sessionToken with _cryptoChannel: $signature');
+        }
+      } catch (e) {
+        debugPrint('OneAuth: Error invoking signTransactionHash on _cryptoChannel: $e');
+      }
+    }
+
+    if (signature.isEmpty) {
+      try {
+        signature = await _secureStorage.read(key: 'certificate_serial') ?? '';
+      } catch (_) {}
+    }
+
+    return Options(
+      headers: {
+        'X-DEVICE-SIGNATURE': signature,
+      },
+    );
+  }
+
   @override
   Future<Map<String, dynamic>> initiateAuthTypeChange(String customerUniqueKey) async {
     await _ensureSecurity();
@@ -1135,6 +1162,7 @@ class OneAuth implements OneAuthInterface {
       final response = await dioClient.dio.get(
         path,
         queryParameters: {'customerUniqueKey': customerUniqueKey},
+        options: await _getDeviceSignatureOptions(),
       );
       return Map<String, dynamic>.from(response.data);
     } on DioException catch (e) {
@@ -1183,6 +1211,7 @@ class OneAuth implements OneAuthInterface {
       final response = await dioClient.dio.post(
         path,
         data: payload,
+        options: await _getDeviceSignatureOptions(sessionToken),
       );
       return Map<String, dynamic>.from(response.data);
     } on DioException catch (e) {
@@ -1222,6 +1251,7 @@ class OneAuth implements OneAuthInterface {
       final response = await dioClient.dio.post(
         path,
         data: payload,
+        options: await _getDeviceSignatureOptions(sessionToken),
       );
       return Map<String, dynamic>.from(response.data);
     } on DioException catch (e) {
@@ -1251,6 +1281,7 @@ class OneAuth implements OneAuthInterface {
       final response = await dioClient.dio.post(
         path,
         data: payload,
+        options: await _getDeviceSignatureOptions(sessionToken),
       );
       return Map<String, dynamic>.from(response.data);
     } on DioException catch (e) {
@@ -1282,6 +1313,7 @@ class OneAuth implements OneAuthInterface {
       final response = await dioClient.dio.post(
         path,
         data: payload,
+        options: await _getDeviceSignatureOptions(sessionToken),
       );
       return Map<String, dynamic>.from(response.data);
     } on DioException catch (e) {
@@ -1308,6 +1340,31 @@ class OneAuth implements OneAuthInterface {
     if (token != null && token.isNotEmpty) {
       setUserToken(token);
     }
+
+    try {
+      final status = await checkEnrollmentStatus();
+      if (status['valid'] != true) {
+        if (context.mounted) {
+          OneAuthSnackBar.show(
+            context,
+            message: 'OneAuth is not Active',
+            isError: true,
+          );
+        }
+        return;
+      }
+    } catch (_) {
+      if (context.mounted) {
+        OneAuthSnackBar.show(
+          context,
+          message: 'OneAuth is not Active',
+          isError: true,
+        );
+      }
+      return;
+    }
+
+    if (!context.mounted) return;
     final navigator = Navigator.of(context);
 
     await navigator.push(
