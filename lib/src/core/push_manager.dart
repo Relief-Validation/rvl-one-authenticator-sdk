@@ -102,6 +102,7 @@ Future<void> _handleChallengeAction(String? actionId, String? payload) async {
   final messageId = data['messageId'] ?? data['message_id'] ?? data['customerUniqueKey'];
   final txnId = data['txnId'] ?? data['txn_id'] ?? data['transactionId'];
   final txnHash = data['txnHash'] ?? data['txn_hash'] ?? '';
+  final sessionToken = data['sessionToken'] ?? data['session_token'];
   final isYes = normalized == 'action_yes';
   final hasTxn = txnId != null && txnId.toString().isNotEmpty;
 
@@ -111,14 +112,14 @@ Future<void> _handleChallengeAction(String? actionId, String? payload) async {
         'Invoking ${hasTxn ? "submitTransactionSignature" : "verifyNumberMatching"}...',
   );
 
-  if (!isYes) {
-    OneAuth().notifyChallengeReceived({
-      'status': 'DECLINED',
-      if (hasTxn) 'txnId': txnId,
-      'messageId': messageId,
-      'userResponse': 'false',
-    });
-  }
+  // Notify active UI listeners immediately about the user's notification button choice
+  OneAuth().notifyChallengeReceived({
+    'status': isYes ? 'APPROVED' : 'DECLINED',
+    if (hasTxn) 'txnId': txnId,
+    if (messageId != null) 'messageId': messageId,
+    if (sessionToken != null) 'sessionToken': sessionToken,
+    'userResponse': isYes.toString(),
+  });
 
   try {
     if (hasTxn) {
@@ -129,16 +130,23 @@ Future<void> _handleChallengeAction(String? actionId, String? payload) async {
         authType: 'PUSH',
         userResponse: isYes.toString(),
       );
+    } else if (sessionToken != null && sessionToken.toString().isNotEmpty) {
+      await OneAuth().verifyAuthTypeChange(
+        sessionToken: sessionToken.toString(),
+        customerUniqueKey: (data['customerUniqueKey'] ?? '').toString(),
+        userResponse: isYes.toString(),
+      );
     } else {
       await OneAuth().verifyNumberMatching(
         messageId: messageId?.toString(),
         preferredAuthenticationType: 'PUSH',
         userResponse: isYes.toString(),
+        sessionToken: sessionToken?.toString(),
       );
     }
     debugPrint('OneAuth: ${isYes ? "YES" : "NO"} action completed successfully.');
   } catch (e) {
-    debugPrint('OneAuth: ${isYes ? "YES" : "NO"} action failed: $e');
+    debugPrint('OneAuth: ${isYes ? "YES" : "NO"} action note: $e');
   }
 }
 
