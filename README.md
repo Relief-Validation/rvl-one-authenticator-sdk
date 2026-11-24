@@ -68,10 +68,22 @@ This single import exposes `OneAuth`, `OneAuthUser`, `TransactionHashService`, `
 ## Platform Setup
 
 ### Android
-1. Add the required permissions to `android/app/src/main/AndroidManifest.xml`:
+1. Add the required permissions and notification metadata to `android/app/src/main/AndroidManifest.xml`:
    ```xml
+   <uses-permission android:name="android.permission.INTERNET"/>
    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
+   <application ...>
+       ...
+       <!-- Default FCM notification channel & icon -->
+       <meta-data
+           android:name="com.google.firebase.messaging.default_notification_channel_id"
+           android:value="one_auth_high_importance_channel_v2" />
+       <meta-data
+           android:name="com.google.firebase.messaging.default_notification_icon"
+           android:resource="@drawable/ic_one_auth_notification" />
+   </application>
    ```
 
 2. In `android/app/src/main/kotlin/.../MainActivity.kt`, ensure `MainActivity` extends `FlutterFragmentActivity`:
@@ -81,7 +93,17 @@ This single import exposes `OneAuth`, `OneAuthUser`, `TransactionHashService`, `
    class MainActivity: FlutterFragmentActivity()
    ```
 
-3. Ensure `minSdkVersion` in `android/app/build.gradle` is at least `23`.
+3. In `android/app/build.gradle` (or `build.gradle.kts`):
+   - Ensure `minSdkVersion` is at least `23`.
+   - Enable core library desugaring:
+     ```kotlin
+     compileOptions {
+         isCoreLibraryDesugaringEnabled = true
+     }
+     dependencies {
+         coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+     }
+     ```
 
 ### iOS
 Add `NSFaceIDUsageDescription` to your `ios/Runner/Info.plist`:
@@ -89,6 +111,56 @@ Add `NSFaceIDUsageDescription` to your `ios/Runner/Info.plist`:
 <key>NSFaceIDUsageDescription</key>
 <string>We use biometric authentication to securely authorize transactions and verify your identity.</string>
 ```
+
+---
+
+## Push Notifications & Firebase Setup
+
+The OneAuth backend dispatches challenge push notifications (such as YES/NO push approval or Number Matching) through Firebase Cloud Messaging (FCM). 
+
+Google Firebase enforces that notifications can only be delivered to an app if that app's package name is registered in the Firebase project. Follow this **3-step setup** to receive notifications:
+
+### 3-Step Setup for Integrators:
+
+#### Step 1: Provide Your App's Package Name
+Send your app's `applicationId` / package name (found in `android/app/build.gradle`) to the OneAuth administration team (e.g. `com.clientbank.app`).
+
+The team registers your package name in the **`one-authenticator`** Firebase Console project and provides your unique **Firebase App ID** (e.g. `1:589487041208:android:<YOUR_APP_ID>`).
+
+#### Step 2: Initialize OneAuth in `main()`
+In your app's `main.dart`, initialize Flutter bindings and call `OneAuth().initialize()` with your registered `FirebaseOptions`:
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:one_auth/one_auth.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize OneAuth with your registered Firebase App ID
+  await OneAuth().initialize(
+    firebaseOptions: const FirebaseOptions(
+      apiKey: 'AIzaSyDBwRFJA2r2mNAGvjouqrurNey4U0Rzl7o',
+      appId: '1:589487041208:android:<YOUR_APP_ID>',
+      messagingSenderId: '589487041208',
+      projectId: 'one-authenticator',
+    ),
+  );
+
+  runApp(const MyApp());
+}
+```
+
+> **Why this is required:** 
+> 1. Initializing in `main()` automatically requests notification permissions, registers background message handlers, and syncs the device's FCM token with the OneAuth server on startup (`/auth/device/fcm-token`).
+> 2. Passing your registered `appId` ensures Google Play Services verifies your package name with Firebase, preventing `FIS_AUTH_ERROR`.
+
+#### Step 3: Verify Delivery
+Run your app in debug mode and verify the console log:
+```text
+OneAuth SDK: FCM token synced with server (deviceUuid: ...)
+```
+When a transaction or authentication challenge is triggered, a high-importance heads-up banner will appear with interactive approval buttons.
 
 ---
 
