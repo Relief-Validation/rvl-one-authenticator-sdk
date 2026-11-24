@@ -155,6 +155,22 @@ void main() async {
 > 1. Initializing in `main()` automatically requests notification permissions, registers background message handlers, and syncs the device's FCM token with the OneAuth server on startup (`/auth/device/fcm-token`).
 > 2. Passing your registered `appId` ensures Google Play Services verifies your package name with Firebase, preventing `FIS_AUTH_ERROR`.
 
+#### Do you need `google-services.json`? (Two Options)
+
+* **Option A — Pure Code (No `google-services.json` file needed):**
+  You do **not** need to place `google-services.json` in your repository. To ensure background push notifications wake up your app when it is terminated, add your project IDs to `android/app/src/main/res/values/strings.xml`:
+  ```xml
+  <?xml version="1.0" encoding="utf-8"?>
+  <resources>
+      <string name="gcm_defaultSenderId" translatable="false">589487041208</string>
+      <string name="google_app_id" translatable="false">1:589487041208:android:<YOUR_APP_ID></string>
+  </resources>
+  ```
+  *(No Google Services Gradle plugin is required in `build.gradle` for Option A).*
+
+* **Option B — Standard `google-services.json`:**
+  Place the `google-services.json` provided by the OneAuth team into your `android/app/` folder, and apply `id("com.google.gms.google-services")` in your Gradle plugins.
+
 #### Step 3: Verify Delivery
 Run your app in debug mode and verify the console log:
 ```text
