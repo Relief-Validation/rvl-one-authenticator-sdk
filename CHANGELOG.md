@@ -1,3 +1,9 @@
+## 0.10.1
+
+* Exported `FirebaseOptions` from `package:one_auth/one_auth.dart`.
+* Added comprehensive 3-step Push Notifications & Firebase setup guide in `README.md`.
+* Documented Android notification channel and icon metadata requirements.
+
 ## 0.10.0
 
 * Added session token support to `PushManager` for auth type change verification in background challenge handling.

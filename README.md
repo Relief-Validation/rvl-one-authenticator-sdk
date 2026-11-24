@@ -45,7 +45,7 @@ dependencies:
    one_auth:
       git:
          url: https://github.com/Relief-Validation/rvl-one-authenticator-sdk.git
-         ref: v0.10.0
+         ref: v0.10.1
 ```
 
 ### Via Local Path (Monorepo)
