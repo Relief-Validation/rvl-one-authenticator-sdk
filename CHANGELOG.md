@@ -1,3 +1,11 @@
+## 0.10.0
+
+* Added session token support to `PushManager` for auth type change verification in background challenge handling.
+* Enhanced push challenge notification listener to dispatch both approved and declined states immediately.
+* Added interactive tap handlers on push verification screen banner buttons (YES / NO) for direct confirmation and denial handling.
+* Added `USE_BIOMETRIC` permission declaration in Android manifest.
+* Removed hardcoded credentials and improved security configurations.
+
 ## 0.9.0
 
 * Added Change Authentication Type feature (`startChangeAuthTypeFlow`).
