@@ -5,6 +5,7 @@ export 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 
 export 'src/one_auth_interface.dart';
 export 'src/one_auth_impl.dart';
+export 'src/core/exceptions.dart';
 export 'src/core/csr_manager.dart';
 export 'src/core/push_manager.dart';
 export 'src/core/secure_id_manager.dart';

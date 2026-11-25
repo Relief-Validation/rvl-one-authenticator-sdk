@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
 import '../../core/theme.dart';
+import '../../core/exceptions.dart';
 import '../../widgets/app_bar.dart';
 import '../../widgets/primary_button.dart';
 import '../../models/user.dart';
@@ -96,9 +97,10 @@ class _OneAuthBiometricSetupScreenState extends State<OneAuthBiometricSetupScree
     } catch (e) {
       debugPrint('Error during biometric authentication: $e');
       if (mounted) {
+        final errorMsg = e is OneAuthException ? e.message : 'Biometric authentication failed: $e';
         OneAuthSnackBar.show(
           context,
-          message: 'Biometric authentication failed: ${e.toString()}',
+          message: errorMsg,
           isError: true,
         );
       }

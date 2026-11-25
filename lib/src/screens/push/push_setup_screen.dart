@@ -4,6 +4,7 @@ import '../../widgets/app_bar.dart';
 import '../../models/user.dart';
 import '../../one_auth_impl.dart';
 import '../../core/theme.dart';
+import '../../core/exceptions.dart';
 import '../../core/utils.dart';
 import '../../widgets/snack_bar.dart';
 
@@ -146,7 +147,15 @@ class _OneAuthPushSetupScreenState extends State<OneAuthPushSetupScreen> with Si
       }
       debugPrint('OneAuth: Push setup loaded. Ready for user notification interaction...');
     } catch (e) {
-      debugPrint('OneAuth: Push setup note: $e');
+      debugPrint('OneAuth: Push setup error: $e');
+      if (mounted) {
+        final errorMsg = e is OneAuthException ? e.message : e.toString();
+        OneAuthSnackBar.show(
+          context,
+          message: errorMsg,
+          isError: true,
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);

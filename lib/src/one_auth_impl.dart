@@ -113,6 +113,19 @@ class OneAuth implements OneAuthInterface {
   }
 
   @override
+  void clearSession() {
+    _clientToken = null;
+    _userToken = null;
+    _sessionToken = null;
+    _nonceBase64 = null;
+    _authenticatorUserId = null;
+    _pendingEnrollmentData = null;
+    _lastTransactionRequest = null;
+    _clientStatusController.add(false);
+    debugPrint('OneAuth: Session cleared.');
+  }
+
+  @override
   void setAuthenticatorUserId(String? id) async {
     if (id == null || id.isEmpty) return;
 
@@ -389,9 +402,10 @@ class OneAuth implements OneAuthInterface {
 
       return response.data;
     } on DioException catch (e) {
-      debugPrint('OneAuth: Failed to fetch enrollment nonce: ${e.message}');
+      final msg = _extractDioErrorMessage(e, 'Failed to fetch enrollment nonce');
+      debugPrint('OneAuth: Failed to fetch enrollment nonce: $msg');
       throw OneAuthNetworkException(
-        e.message ?? 'Failed to fetch enrollment nonce',
+        msg,
         statusCode: e.response?.statusCode,
         originalError: e,
       );
@@ -563,9 +577,10 @@ class OneAuth implements OneAuthInterface {
 
       return data;
     } on DioException catch (e) {
-      debugPrint('OneAuth: CSR Submission Failed: ${e.message}');
+      final msg = _extractDioErrorMessage(e, 'CSR Submission Failed');
+      debugPrint('OneAuth: CSR Submission Failed: $msg');
       throw OneAuthNetworkException(
-        e.message ?? 'CSR Submission Failed',
+        msg,
         statusCode: e.response?.statusCode,
         originalError: e,
       );
@@ -827,16 +842,10 @@ class OneAuth implements OneAuthInterface {
       debugPrint('OneAuth: Transaction signature submitted successfully.');
       return data;
     } on DioException catch (e) {
-      final responseData = e.response?.data;
-      String? errorMessage;
-      if (responseData is Map) {
-        errorMessage = responseData['reason'] ?? responseData['message'];
-      }
-      errorMessage ??= e.message;
-
-      debugPrint('OneAuth: Transaction signature failed: $errorMessage');
+      final msg = _extractDioErrorMessage(e, 'Transaction signature failed');
+      debugPrint('OneAuth: Transaction signature failed: $msg');
       throw OneAuthNetworkException(
-        errorMessage ?? 'Transaction signature failed',
+        msg,
         statusCode: e.response?.statusCode,
         originalError: e,
       );
@@ -867,15 +876,15 @@ class OneAuth implements OneAuthInterface {
       debugPrint('OneAuth: Enrollment status check result: $data');
       return data;
     } on DioException catch (e) {
-      debugPrint('OneAuth: Failed to check enrollment status: ${e.message}');
-
       // If it's a 404, we can treat it as not found
       if (e.response?.statusCode == 404) {
         return {'valid': false, 'reason': 'CERTIFICATE_NOT_FOUND'};
       }
 
+      final msg = _extractDioErrorMessage(e, 'Failed to check enrollment status');
+      debugPrint('OneAuth: Failed to check enrollment status: $msg');
       throw OneAuthNetworkException(
-        e.message ?? 'Failed to check enrollment status',
+        msg,
         statusCode: e.response?.statusCode,
         originalError: e,
       );
@@ -987,9 +996,10 @@ class OneAuth implements OneAuthInterface {
 
       return dataToPersist;
     } on DioException catch (e) {
-      debugPrint('OneAuth: /verify failed: ${e.message}');
+      final msg = _extractDioErrorMessage(e, 'Number matching verification failed');
+      debugPrint('OneAuth: /verify failed: $msg');
       throw OneAuthNetworkException(
-        e.message ?? 'Number matching verification failed',
+        msg,
         statusCode: e.response?.statusCode,
         originalError: e,
       );
@@ -1166,9 +1176,10 @@ class OneAuth implements OneAuthInterface {
       );
       return Map<String, dynamic>.from(response.data);
     } on DioException catch (e) {
-      debugPrint('OneAuth: Error initiating auth type change: ${e.message}');
+      final msg = _extractDioErrorMessage(e, 'Failed to initiate auth type change');
+      debugPrint('OneAuth: Error initiating auth type change: $msg');
       throw OneAuthNetworkException(
-        e.message ?? 'Failed to initiate auth type change',
+        msg,
         statusCode: e.response?.statusCode,
         originalError: e,
       );
@@ -1215,9 +1226,10 @@ class OneAuth implements OneAuthInterface {
       );
       return Map<String, dynamic>.from(response.data);
     } on DioException catch (e) {
-      debugPrint('OneAuth: Error verifying auth type change: ${e.message}');
+      final msg = _extractDioErrorMessage(e, 'Failed to verify auth type change');
+      debugPrint('OneAuth: Error verifying auth type change: $msg');
       throw OneAuthNetworkException(
-        e.message ?? 'Failed to verify auth type change',
+        msg,
         statusCode: e.response?.statusCode,
         originalError: e,
       );
@@ -1255,9 +1267,10 @@ class OneAuth implements OneAuthInterface {
       );
       return Map<String, dynamic>.from(response.data);
     } on DioException catch (e) {
-      debugPrint('OneAuth: Error confirming auth type change: ${e.message}');
+      final msg = _extractDioErrorMessage(e, 'Failed to confirm auth type change');
+      debugPrint('OneAuth: Error confirming auth type change: $msg');
       throw OneAuthNetworkException(
-        e.message ?? 'Failed to confirm auth type change',
+        msg,
         statusCode: e.response?.statusCode,
         originalError: e,
       );
@@ -1285,9 +1298,10 @@ class OneAuth implements OneAuthInterface {
       );
       return Map<String, dynamic>.from(response.data);
     } on DioException catch (e) {
-      debugPrint('OneAuth: Error sending notification: ${e.message}');
+      final msg = _extractDioErrorMessage(e, 'Failed to send auth type notification');
+      debugPrint('OneAuth: Error sending notification: $msg');
       throw OneAuthNetworkException(
-        e.message ?? 'Failed to send auth type notification',
+        msg,
         statusCode: e.response?.statusCode,
         originalError: e,
       );
@@ -1317,13 +1331,41 @@ class OneAuth implements OneAuthInterface {
       );
       return Map<String, dynamic>.from(response.data);
     } on DioException catch (e) {
-      debugPrint('OneAuth: Error in choose_type: ${e.message}');
+      final msg = _extractDioErrorMessage(e, 'Failed to choose auth type');
+      debugPrint('OneAuth: Error in choose_type: $msg');
       throw OneAuthNetworkException(
-        e.message ?? 'Failed to choose auth type',
+        msg,
         statusCode: e.response?.statusCode,
         originalError: e,
       );
     }
+  }
+
+  String _extractDioErrorMessage(DioException e, String fallback) {
+    final responseData = e.response?.data;
+    if (responseData is Map) {
+      final msg = responseData['message'] ?? responseData['error'] ?? responseData['reason'] ?? responseData['detail'];
+      if (msg != null && msg.toString().isNotEmpty) {
+        return msg.toString();
+      }
+    } else if (responseData is String && responseData.isNotEmpty) {
+      try {
+        final parsed = jsonDecode(responseData);
+        if (parsed is Map) {
+          final msg = parsed['message'] ?? parsed['error'] ?? parsed['reason'] ?? parsed['detail'];
+          if (msg != null && msg.toString().isNotEmpty) {
+            return msg.toString();
+          }
+        }
+      } catch (_) {}
+    }
+    if (e.message != null && e.message!.isNotEmpty) {
+      return e.message!;
+    }
+    if (e.error != null && e.error.toString().isNotEmpty) {
+      return e.error.toString();
+    }
+    return fallback;
   }
 
   @override

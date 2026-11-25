@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
 import '../../core/theme.dart';
+import '../../core/exceptions.dart';
 import '../../widgets/app_bar.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/pin_input.dart';
@@ -148,9 +149,10 @@ class _OneAuthChangeAuthTypeScreenState extends State<OneAuthChangeAuthTypeScree
     } catch (e) {
       debugPrint('OneAuth Error in change flow: $e');
       if (mounted) {
+        final errorMsg = e is OneAuthException ? e.message : 'Failed to change auth type: $e';
         OneAuthSnackBar.show(
           context,
-          message: 'Failed to change auth type: ${e.toString()}',
+          message: errorMsg,
           isError: true,
         );
       }

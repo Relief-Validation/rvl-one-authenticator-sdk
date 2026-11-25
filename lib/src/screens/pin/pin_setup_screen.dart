@@ -3,6 +3,7 @@ import '../../core/theme.dart';
 import '../../widgets/app_bar.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/pin_input.dart';
+import '../../widgets/snack_bar.dart';
 import '../../models/user.dart';
 import 'pin_setup_view_model.dart';
 
@@ -86,6 +87,12 @@ class _OneAuthPinSetupScreenState extends State<OneAuthPinSetupScreen> {
           controller.clear();
         }
         _confirmPinFocusNodes[0].requestFocus();
+      } else if (mounted && _viewModel.errorMessage != null) {
+        OneAuthSnackBar.show(
+          context,
+          message: _viewModel.errorMessage!,
+          isError: true,
+        );
       }
     }
   }

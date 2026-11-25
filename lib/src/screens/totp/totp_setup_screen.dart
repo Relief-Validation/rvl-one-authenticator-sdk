@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/theme.dart';
+import '../../core/exceptions.dart';
 import '../../core/totp_generator.dart';
 import '../../widgets/app_bar.dart';
 import '../../widgets/primary_button.dart';
@@ -97,6 +98,24 @@ class _OneAuthTotpSetupScreenState extends State<OneAuthTotpSetupScreen> {
         }
 
         if (secret == null || secret.isEmpty) {
+          try {
+            final nonceData = await OneAuth().getEnrollmentNonce(widget.user.id);
+            final nonceBase64 = nonceData['nonceBase64'] ??
+                nonceData['data']?['nonceBase64'] ??
+                nonceData['nonce_base64'] ??
+                nonceData['nonce'];
+            if (nonceBase64 != null && nonceBase64 is String && nonceBase64.isNotEmpty) {
+              secret = OneAuthTotpGenerator.generateSecretFromNonce(nonceBase64);
+            }
+          } catch (e) {
+            debugPrint('OneAuth TOTP: Error fetching nonce for TOTP secret: $e');
+          }
+          secret ??= OneAuthTotpGenerator.generateSecret();
+          await OneAuth().setTotpSecret(widget.user.id, secret);
+          debugPrint('OneAuth TOTP: Generated and stored secret for userId ${widget.user.id}: $secret');
+        }
+
+        if (secret.isEmpty) {
           debugPrint('OneAuth: Unable to obtain secret to generate TOTP code.');
           return;
         }
@@ -185,10 +204,11 @@ class _OneAuthTotpSetupScreenState extends State<OneAuthTotpSetupScreen> {
     } catch (e) {
       debugPrint('OneAuth: TOTP verification failed: $e');
       if (mounted) {
-        setState(() => _errorMessage = 'Verification Failed: $e');
+        final errorMsg = e is OneAuthException ? e.message : 'Verification Failed: $e';
+        setState(() => _errorMessage = errorMsg);
         OneAuthSnackBar.show(
           context,
-          message: 'Verification Failed: $e',
+          message: errorMsg,
           isError: true,
         );
       }

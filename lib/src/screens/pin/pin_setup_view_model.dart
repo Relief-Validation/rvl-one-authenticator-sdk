@@ -57,7 +57,7 @@ class OneAuthPinSetupViewModel extends ChangeNotifier {
       return false;
     } catch (e) {
       debugPrint('Unexpected error during PIN setup: $e');
-      _errorMessage = 'An unexpected error occurred: $e';
+      _errorMessage = e is OneAuthException ? e.message : 'An unexpected error occurred: $e';
       _isLoading = false;
       notifyListeners();
       return false;

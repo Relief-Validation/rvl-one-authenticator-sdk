@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
 
 class ErrorInterceptor extends Interceptor {
@@ -14,10 +15,26 @@ class ErrorInterceptor extends Interceptor {
       case DioExceptionType.badResponse:
         final data = err.response?.data;
         if (data is Map) {
-          errorMessage = data['message'] ?? 
-                         data['error'] ?? 
-                         data['reason'] ?? 
+          errorMessage = data['message']?.toString() ?? 
+                         data['error']?.toString() ?? 
+                         data['reason']?.toString() ?? 
+                         data['detail']?.toString() ?? 
                          'Server error: ${err.response?.statusCode}';
+        } else if (data is String && data.isNotEmpty) {
+          try {
+            final parsed = jsonDecode(data);
+            if (parsed is Map) {
+              errorMessage = parsed['message']?.toString() ?? 
+                             parsed['error']?.toString() ?? 
+                             parsed['reason']?.toString() ?? 
+                             parsed['detail']?.toString() ?? 
+                             data;
+            } else {
+              errorMessage = data;
+            }
+          } catch (_) {
+            errorMessage = data;
+          }
         } else {
           errorMessage = 'The server responded with an error (${err.response?.statusCode}).';
         }

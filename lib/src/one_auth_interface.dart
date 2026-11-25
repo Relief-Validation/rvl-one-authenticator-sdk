@@ -70,6 +70,9 @@ abstract class OneAuthInterface {
   /// Sets the authenticator user ID to be included in all requests.
   void setAuthenticatorUserId(String? id);
 
+  /// Clears active session tokens, authenticator user ID, and temporary session state.
+  void clearSession();
+
   /// Stream to listen for client authentication status changes.
   Stream<bool> get onClientStatusChanged;
 
