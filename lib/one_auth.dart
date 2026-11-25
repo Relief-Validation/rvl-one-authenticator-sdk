@@ -2,6 +2,7 @@ library one_auth;
 
 export 'package:decimal/decimal.dart';
 export 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+export 'package:permission_handler/permission_handler.dart';
 
 export 'src/one_auth_interface.dart';
 export 'src/one_auth_impl.dart';

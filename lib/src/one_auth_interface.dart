@@ -1,5 +1,4 @@
 import 'package:flutter/widgets.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:dio/dio.dart';
 
 import '../one_auth.dart';
@@ -18,6 +17,9 @@ abstract class OneAuthInterface {
 
   /// Stream of incoming push notification transaction challenge payloads.
   Stream<Map<String, dynamic>> get onPushChallengeReceived;
+
+  /// Requests runtime notification permission for push notifications.
+  Future<void> requestNotificationPermission();
 
   /// Emits a challenge payload to listening UI components.
   void notifyChallengeReceived(Map<String, dynamic> data);

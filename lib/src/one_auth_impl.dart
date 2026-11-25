@@ -84,6 +84,11 @@ class OneAuth implements OneAuthInterface {
       _pushManager.onPushChallengeReceived;
 
   @override
+  Future<void> requestNotificationPermission() async {
+    await _pushManager.requestNotificationPermission();
+  }
+
+  @override
   void notifyChallengeReceived(Map<String, dynamic> data) =>
       _pushManager.notifyChallengeReceived(data);
 

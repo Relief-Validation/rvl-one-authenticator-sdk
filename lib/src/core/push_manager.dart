@@ -227,7 +227,27 @@ class OneAuthPushManager {
   /// Retrieves the most recent push challenge payload received by the SDK.
   Map<String, dynamic>? get latestChallengeData => _latestChallengeData;
 
-  /// Initializes FCM, requests permissions, and sets up notification listeners internally.
+  /// Requests notification permissions for FCM and push challenges.
+  Future<NotificationSettings> requestNotificationPermission() async {
+    try {
+      final settings = await _fcm.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+        debugPrint('OneAuth SDK: Push notification permissions granted.');
+      } else {
+        debugPrint('OneAuth SDK: Push notification permissions not granted.');
+      }
+      return settings;
+    } catch (e) {
+      debugPrint('OneAuth SDK: Error requesting notification permissions: $e');
+      rethrow;
+    }
+  }
+
+  /// Initializes FCM and sets up notification listeners internally.
   Future<void> initialize({
     required DioClient dioClient,
     FirebaseOptions? firebaseOptions,
@@ -240,19 +260,7 @@ class OneAuthPushManager {
         );
       }
 
-      // 2. Request Push Permissions automatically
-      final settings = await _fcm.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-
-      if (settings.authorizationStatus != AuthorizationStatus.authorized) {
-        debugPrint('OneAuth SDK: Push notification permissions not granted.');
-        return;
-      }
-
-      // 3. Initialize Local Notifications Plugin & High Importance Channel
+      // 2. Initialize Local Notifications Plugin & High Importance Channel
       const androidInitSettings = AndroidInitializationSettings('ic_one_auth_notification');
       const initSettings = InitializationSettings(android: androidInitSettings);
       await _localNotifications.initialize(
@@ -275,13 +283,13 @@ class OneAuthPushManager {
         sound: true,
       );
 
-      // 4. Register Top-Level Background Handler
+      // 3. Register Top-Level Background Handler
       FirebaseMessaging.onBackgroundMessage(_oneAuthBackgroundMessageHandler);
 
-      // 5. Sync FCM Token with OneAuth Server
+      // 4. Sync FCM Token with OneAuth Server
       await syncFcmToken(dioClient);
 
-      // 6. Auto-sync on Token Refresh
+      // 5. Auto-sync on Token Refresh
       _fcm.onTokenRefresh.listen((newToken) async {
         debugPrint('OneAuth SDK: FCM Token refreshed.');
         await _secureStorage.write(key: 'fcm_token', value: newToken);

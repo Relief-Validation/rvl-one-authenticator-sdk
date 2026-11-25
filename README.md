@@ -156,7 +156,7 @@ void main() async {
 ```
 
 > **Why this is required:** 
-> 1. Initializing in `main()` automatically requests notification permissions, registers background message handlers, and syncs the device's FCM token with the OneAuth server on startup (`/auth/device/fcm-token`).
+> 1. Initializing in `main()` registers background message handlers and syncs the device's FCM token with the OneAuth server (`/auth/device/fcm-token`). Call `OneAuth().requestNotificationPermission()` on your home screen or when appropriate to request runtime push permissions.
 > 2. Passing your registered `appId` ensures Google Play Services verifies your package name with Firebase, preventing `FIS_AUTH_ERROR`.
 
 #### Do you need `google-services.json`? (Two Options)
