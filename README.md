@@ -86,14 +86,18 @@ This single import exposes `OneAuth`, `OneAuthUser`, `FirebaseOptions`, `Transac
    </application>
    ```
 
-2. In `android/app/src/main/kotlin/.../MainActivity.kt`, ensure `MainActivity` extends `FlutterFragmentActivity`:
+2. Add your app's notification icon assets to `android/app/src/main/res/drawable/` using these exact resource names (the SDK bundles default placeholders, which your app's drawables will override):
+   - `ic_one_auth_notification` (`.xml` or `.png`) — monochrome status-bar small icon referenced by `default_notification_icon` and local challenge notifications.
+   - `ic_bank_logo` (`.png` or `.xml`) — large icon (`DrawableResourceAndroidBitmap('ic_bank_logo')`) displayed in push challenge notifications.
+
+3. In `android/app/src/main/kotlin/.../MainActivity.kt`, ensure `MainActivity` extends `FlutterFragmentActivity`:
    ```kotlin
    import io.flutter.embedding.android.FlutterFragmentActivity
 
    class MainActivity: FlutterFragmentActivity()
    ```
 
-3. In `android/app/build.gradle` (or `build.gradle.kts`):
+4. In `android/app/build.gradle` (or `build.gradle.kts`):
    - Ensure `minSdkVersion` is at least `23`.
    - Enable core library desugaring:
      ```kotlin
