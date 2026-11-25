@@ -1,3 +1,12 @@
+## 0.11.0
+
+* Added `clearSession()` method to `OneAuth` / `OneAuthInterface` to clear active session tokens, authenticator user ID, and temporary state during logout.
+* Exported `OneAuthException` classes (`src/core/exceptions.dart`) from `package:one_auth/one_auth.dart`.
+* Improved API error message extraction in `ErrorInterceptor` and `OneAuth` network calls (parsing `message`, `error`, `reason`, and `detail` from both JSON maps and JSON strings).
+* Improved error display in PIN, TOTP, Biometric, Push, and Change Auth Type screens to surface clean `OneAuthException` messages via `OneAuthSnackBar`.
+* Added enrollment nonce fallback in TOTP setup when generating a TOTP secret.
+* Updated `README.md` setup guide (`strings.xml` alternative to `google-services.json`, `clearSession()` usage, and version reference).
+
 ## 0.10.1
 
 * Exported `FirebaseOptions` from `package:one_auth/one_auth.dart`.

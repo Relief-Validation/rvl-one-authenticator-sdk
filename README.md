@@ -45,7 +45,7 @@ dependencies:
    one_auth:
       git:
          url: https://github.com/Relief-Validation/rvl-one-authenticator-sdk.git
-         ref: v0.10.1
+         ref: v0.11.0
 ```
 
 ### Via Local Path (Monorepo)
@@ -61,7 +61,7 @@ Then import the SDK wherever you use it:
 import 'package:one_auth/one_auth.dart';
 ```
 
-This single import exposes `OneAuth`, `OneAuthUser`, `TransactionHashService`, `TransactionChallengeRequest`, and `OneAuthSnackBar`.
+This single import exposes `OneAuth`, `OneAuthUser`, `FirebaseOptions`, `TransactionHashService`, `TransactionChallengeRequest`, `OneAuthSnackBar`, and typed `OneAuthException` classes.
 
 ---
 
@@ -759,7 +759,17 @@ OneAuthSnackBar.show(
 
 - **Runtime Threat Detection**: Integrates **freeRASP** to detect root/jailbreak, debuggers, emulators, and dynamic instrumentation hooks (Frida).
 - **Environment Obfuscation**: Secure secrets and base URLs are compiled and obfuscated via **Envied**.
-- **Exception Handling**: Typed security exceptions (`OneAuthSecurityException`, `OneAuthCryptoException`, `OneAuthNetworkException`) for error handling.
+- **Exception Handling**: Typed security exceptions (`OneAuthException`, `OneAuthAuthException`, `OneAuthSessionException`, `OneAuthValidationException`, `OneAuthSecurityException`, `OneAuthCryptoException`, `OneAuthNetworkException`) exported from `package:one_auth/one_auth.dart` for structured error handling.
+
+---
+
+## Session Management (`clearSession`)
+
+When a user logs out of your host application, call `clearSession()` to reset active in-memory session tokens, the authenticator user ID, and temporary enrollment/transaction state, and notify listeners on `onClientStatusChanged`:
+
+```dart
+OneAuth().clearSession();
+```
 
 ---
 
@@ -767,6 +777,7 @@ OneAuthSnackBar.show(
 
 - Use the `txnId`, `txnHash` and `authenticationType` returned by the bank backend (CBS) as-is. The only hash your side computes is the `X-SIGNATURE` for the `initChallenge` request.
 - Fetch a fresh client token immediately before each enrollment or verification flow.
+- Call `OneAuth().clearSession()` on user logout to clear active SDK session state.
 - Treat anything other than `verified == true` as a failed transaction.
 - Keep the values in `transactionRequest` identical to the ones used when creating the challenge.
 - Guard every post-`await` use of `context` with `mounted` / `context.mounted`.
